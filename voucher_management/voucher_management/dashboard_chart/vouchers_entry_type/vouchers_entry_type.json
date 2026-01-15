@@ -1,0 +1,43 @@
+{
+ "based_on": "",
+ "chart_name": "Vouchers Entry Type",
+ "chart_type": "Group By",
+ "creation": "2025-12-29 16:46:34.462169",
+ "currency": "INR",
+ "custom_options": "{\r\n  \"colors\": [\"#ff5858\", \"#4caf50\", \"#1f77b4\"],\r\n  \"barOptions\": {\r\n    \"stacked\": 1\r\n  }\r\n}\r\n",
+ "docstatus": 0,
+ "doctype": "Dashboard Chart",
+ "document_type": "Vouchers Entry",
+ "dynamic_filters_json": "[]",
+ "filters_json": "[[\"Vouchers Entry\",\"docstatus\",\"=\",\"1\",false]]",
+ "group_by_based_on": "payment_type",
+ "group_by_type": "Count",
+ "idx": 0,
+ "is_public": 0,
+ "is_standard": 0,
+ "last_synced_on": "2025-12-29 16:57:47.685547",
+ "modified": "2025-12-29 16:58:44.064411",
+ "modified_by": "Administrator",
+ "module": "Voucher Management",
+ "name": "Vouchers Entry Type",
+ "number_of_groups": 3,
+ "owner": "Administrator",
+ "parent_document_type": "",
+ "roles": [
+  {
+   "role": "Accounts Manager"
+  },
+  {
+   "role": "Accounts User"
+  }
+ ],
+ "show_values_over_chart": 1,
+ "source": "",
+ "time_interval": "Yearly",
+ "timeseries": 0,
+ "timespan": "Last Year",
+ "type": "Percentage",
+ "use_report_chart": 0,
+ "value_based_on": "",
+ "y_axis": []
+}

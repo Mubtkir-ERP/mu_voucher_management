@@ -1,0 +1,66 @@
+{
+ "charts": [
+  {
+   "chart_name": "Vouchers Entry Type",
+   "label": "Vouchers Entry Type"
+  }
+ ],
+ "content": "[{\"id\":\"nae1mIr2t-\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Vouchers Entery</span>\",\"col\":12}},{\"id\":\"H2nX13H0Dt\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Vouchers Entry Type\",\"col\":8}},{\"id\":\"PNErY-sqc8\",\"type\":\"quick_list\",\"data\":{\"quick_list_name\":\"Vouchers Entry\",\"col\":4}},{\"id\":\"VJE40gJPiI\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b></b></span>\",\"col\":12}},{\"id\":\"pocQBuApX1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"New Vouchers Entry\",\"col\":3}},{\"id\":\"70XYymyuzy\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"List Vouchers Entry\",\"col\":3}},{\"id\":\"MYNKuB6zWd\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Report Vouchers Entry\",\"col\":3}}]",
+ "creation": "2025-12-23 14:05:24.421407",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "fal fa-donate",
+ "idx": 0,
+ "indicator_color": "green",
+ "is_hidden": 0,
+ "label": "Voucher Entries",
+ "links": [],
+ "modified": "2025-12-29 16:58:02.662699",
+ "modified_by": "Administrator",
+ "module": "Voucher Management",
+ "name": "Voucher Entries",
+ "number_cards": [],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [
+  {
+   "document_type": "Vouchers Entry",
+   "label": "Vouchers Entry",
+   "quick_list_filter": "[]"
+  }
+ ],
+ "roles": [],
+ "sequence_id": 41.0,
+ "shortcuts": [
+  {
+   "color": "Green",
+   "doc_view": "List",
+   "format": "{}",
+   "label": "List Vouchers Entry",
+   "link_to": "Vouchers Entry",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "Report Builder",
+   "label": "Report Vouchers Entry",
+   "link_to": "Vouchers Entry",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "New",
+   "label": "New Vouchers Entry",
+   "link_to": "Vouchers Entry",
+   "stats_filter": "[]",
+   "type": "DocType"
+  }
+ ],
+ "title": "Voucher Entries"
+}

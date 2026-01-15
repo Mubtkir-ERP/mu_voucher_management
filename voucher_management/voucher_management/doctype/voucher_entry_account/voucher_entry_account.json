@@ -1,0 +1,202 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2025-12-22 16:20:15.310963",
+ "doctype": "DocType",
+ "document_type": "Document",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "account",
+  "account_type",
+  "col_break1",
+  "party_type",
+  "party",
+  "accounting_dimensions_section",
+  "cost_center",
+  "dimension_col_break",
+  "project",
+  "sec_break1",
+  "taxes",
+  "amount",
+  "col_break2",
+  "amount_before_tax",
+  "tax_amount",
+  "amount_after_tax",
+  "reference",
+  "company",
+  "col_break3",
+  "user_remark"
+ ],
+ "fields": [
+  {
+   "bold": 1,
+   "columns": 2,
+   "fieldname": "account",
+   "fieldtype": "Link",
+   "in_global_search": 1,
+   "in_list_view": 1,
+   "label": "Account",
+   "oldfieldname": "account",
+   "oldfieldtype": "Link",
+   "options": "Account",
+   "print_width": "250px",
+   "search_index": 1,
+   "width": "250px"
+  },
+  {
+   "fetch_from": "account.account_type",
+   "fieldname": "account_type",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Account Type",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "col_break1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "party_type",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Party Type",
+   "options": "DocType",
+   "search_index": 1
+  },
+  {
+   "columns": 2,
+   "fieldname": "party",
+   "fieldtype": "Dynamic Link",
+   "in_list_view": 1,
+   "label": "Party",
+   "options": "party_type"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "accounting_dimensions_section",
+   "fieldtype": "Section Break",
+   "label": "Accounting Dimensions"
+  },
+  {
+   "allow_on_submit": 1,
+   "default": ":Company",
+   "description": "If Income or Expense",
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "label": "Cost Center",
+   "oldfieldname": "cost_center",
+   "oldfieldtype": "Link",
+   "options": "Cost Center",
+   "print_hide": 1,
+   "print_width": "180px",
+   "width": "180px"
+  },
+  {
+   "fieldname": "dimension_col_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "project",
+   "fieldtype": "Link",
+   "label": "Project",
+   "options": "Project"
+  },
+  {
+   "fieldname": "sec_break1",
+   "fieldtype": "Section Break",
+   "label": "Amount"
+  },
+  {
+   "fieldname": "col_break2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "reference",
+   "fieldtype": "Section Break",
+   "label": "Reference"
+  },
+  {
+   "fieldname": "col_break3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "bold": 1,
+   "columns": 2,
+   "fieldname": "taxes",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Taxes Type",
+   "options": "Purchase Taxes and Charges Template",
+   "print_hide_if_no_value": 1
+  },
+  {
+   "bold": 1,
+   "columns": 2,
+   "fieldname": "tax_amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Tax Amount",
+   "options": "account_currency",
+   "print_hide_if_no_value": 1
+  },
+  {
+   "bold": 1,
+   "columns": 2,
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Amount",
+   "options": "account_currency",
+   "print_hide_if_no_value": 1
+  },
+  {
+   "bold": 1,
+   "columns": 2,
+   "fieldname": "amount_before_tax",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Amount Before Tax",
+   "options": "account_currency",
+   "print_hide_if_no_value": 1
+  },
+  {
+   "bold": 1,
+   "columns": 2,
+   "fieldname": "amount_after_tax",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Amount AfterTax",
+   "options": "account_currency",
+   "print_hide_if_no_value": 1
+  },
+  {
+   "fieldname": "user_remark",
+   "fieldtype": "Small Text",
+   "label": "Remark",
+   "no_copy": 1,
+   "print_hide": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company"
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2025-12-24 14:54:40.202784",
+ "modified_by": "Administrator",
+ "module": "Voucher Management",
+ "name": "Voucher Entry Account",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

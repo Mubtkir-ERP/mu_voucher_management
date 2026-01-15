@@ -1,0 +1,438 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2025-12-22 16:46:14.407599",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "type_of_payment",
+  "payment_type",
+  "mode_of_payment",
+  "column_break_5",
+  "posting_date",
+  "account_payment",
+  "column_break_ngsl",
+  "time",
+  "reference_no",
+  "mode_of_payment_type",
+  "section_break_zqil",
+  "remarks",
+  "column_break_boag",
+  "section_break_xviw",
+  "company",
+  "column_break_fbft",
+  "currency",
+  "accounting_dimensions_section",
+  "cost_center",
+  "dimension_col_break",
+  "payment_accounts_section",
+  "paid_from",
+  "paid_from_account_type",
+  "column_break_18",
+  "paid_to",
+  "paid_to_account_type",
+  "payment_amounts_section",
+  "paid_amount",
+  "column_break_21",
+  "section_break_14",
+  "references",
+  "section_break_ebed",
+  "get_outstanding_invoices",
+  "vouchers_payment_references",
+  "vouchers_payment_references2",
+  "section_break_34",
+  "total_allocated_amount",
+  "column_break_fxtf",
+  "total_taxes",
+  "column_break_36",
+  "amount_after_tax",
+  "section_break_12",
+  "journal_entry",
+  "column_break_16",
+  "subscription_section",
+  "title",
+  "naming_series",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "type_of_payment",
+   "fieldtype": "Section Break",
+   "label": "Type of Payment"
+  },
+  {
+   "bold": 1,
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "ACC-PA/RE-.YYYY.-",
+   "print_hide": 1,
+   "reqd": 1,
+   "set_only_once": 1
+  },
+  {
+   "bold": 1,
+   "fieldname": "payment_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Type",
+   "options": "Receive\nPay\nInternal Transfer",
+   "print_hide": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_5",
+   "fieldtype": "Column Break"
+  },
+  {
+   "bold": 1,
+   "default": "Today",
+   "fieldname": "posting_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "print_hide": 1,
+   "remember_last_selected_value": 1
+  },
+  {
+   "fieldname": "mode_of_payment",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Mode of Payment",
+   "options": "Mode of Payment"
+  },
+  {
+   "fieldname": "payment_accounts_section",
+   "fieldtype": "Section Break",
+   "label": "Accounts"
+  },
+  {
+   "bold": 1,
+   "depends_on": "eval:(in_list([\"Internal Transfer\"], doc.payment_type) || doc.party)",
+   "fetch_from": "mode_of_payment.custom_default_account",
+   "fetch_if_empty": 1,
+   "fieldname": "paid_from",
+   "fieldtype": "Link",
+   "in_global_search": 1,
+   "label": "Account Paid From",
+   "mandatory_depends_on": "eval:(in_list([\"Internal Transfer\"], doc.payment_type) || doc.party)",
+   "options": "Account",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "column_break_18",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:(in_list([\"Internal Transfer\"], doc.payment_type) || doc.party)",
+   "fieldname": "paid_to",
+   "fieldtype": "Link",
+   "in_global_search": 1,
+   "label": "Account Paid To",
+   "mandatory_depends_on": "eval:(in_list([\"Internal Transfer\"], doc.payment_type) || doc.party)",
+   "options": "Account",
+   "print_hide": 1
+  },
+  {
+   "fetch_from": "paid_to.account_type",
+   "fieldname": "paid_to_account_type",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Paid To Account Type"
+  },
+  {
+   "depends_on": "eval:(doc.paid_to && doc.paid_from)",
+   "fieldname": "payment_amounts_section",
+   "fieldtype": "Section Break",
+   "label": "Amount"
+  },
+  {
+   "bold": 1,
+   "depends_on": "eval:(in_list([\"Internal Transfer\"], doc.payment_type) || doc.party)",
+   "fieldname": "paid_amount",
+   "fieldtype": "Currency",
+   "label": "Amount",
+   "mandatory_depends_on": "eval:(in_list([\"Internal Transfer\"], doc.payment_type) || doc.party)",
+   "options": "paid_from_account_currency"
+  },
+  {
+   "fieldname": "column_break_21",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:(in_list([\"Receive\", \"Pay\"], doc.payment_type) || doc.party)",
+   "fieldname": "section_break_14",
+   "fieldtype": "Section Break",
+   "label": "Vouchers Accounts"
+  },
+  {
+   "fieldname": "references",
+   "fieldtype": "Table",
+   "label": "Accounts References",
+   "options": "Voucher Entry Account"
+  },
+  {
+   "fieldname": "section_break_34",
+   "fieldtype": "Section Break",
+   "label": "Totals"
+  },
+  {
+   "bold": 1,
+   "default": "0",
+   "fieldname": "total_allocated_amount",
+   "fieldtype": "Currency",
+   "label": "Total ",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_36",
+   "fieldtype": "Column Break"
+  },
+  {
+   "bold": 1,
+   "depends_on": "eval:(doc.paid_from_account_type == 'Bank' || doc.mode_of_payment_type == 'Bank')",
+   "fieldname": "reference_no",
+   "fieldtype": "Data",
+   "label": "Ref No"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "accounting_dimensions_section",
+   "fieldtype": "Section Break",
+   "label": "Accounting Dimensions"
+  },
+  {
+   "fieldname": "dimension_col_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "label": "Cost Center",
+   "options": "Cost Center"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_break_12",
+   "fieldtype": "Section Break",
+   "label": "More Information"
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Notes",
+   "no_copy": 1
+  },
+  {
+   "fieldname": "column_break_16",
+   "fieldtype": "Column Break"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "subscription_section",
+   "fieldtype": "Section Break",
+   "hidden": 1
+  },
+  
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Title",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Vouchers Entry",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fetch_from": "mode_of_payment.type",
+   "fieldname": "mode_of_payment_type",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Mode of Payment Type"
+  },
+  {
+   "fieldname": "column_break_fxtf",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "total_taxes",
+   "fieldtype": "Currency",
+   "label": "Total Taxes",
+   "options": "Company:company:default_currency",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fetch_from": "paid_from.account_type",
+   "fieldname": "paid_from_account_type",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Paid From Account Type"
+  },
+  {
+   "fetch_from": "mode_of_payment.custom_default_account",
+   "fetch_if_empty": 1,
+   "fieldname": "account_payment",
+   "fieldtype": "Link",
+   "label": "Account",
+   "options": "Account"
+  },
+  {
+   "default": "0",
+   "fieldname": "amount_after_tax",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Grand Total",
+   "options": "Company:company:default_currency",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "bold": 1,
+   "fieldname": "journal_entry",
+   "fieldtype": "Link",
+   "in_global_search": 1,
+   "label": "Journal Entry",
+   "no_copy": 1,
+   "options": "Journal Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_ngsl",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_break_zqil",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "column_break_boag",
+   "fieldtype": "Column Break"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_break_xviw",
+   "fieldtype": "Section Break",
+   "label": "Company Info"
+  },
+  {
+   "fieldname": "column_break_fbft",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fetch_from": "company.default_currency",
+   "fieldname": "currency",
+   "fieldtype": "Link",
+   "label": "Currency",
+   "options": "Currency",
+   "print_hide": 1,
+   "remember_last_selected_value": 1
+  },
+  {
+   "default": "14:19:31",
+   "fieldname": "time",
+   "fieldtype": "Time",
+   "label": "Time"
+  },
+  {
+   "fieldname": "section_break_ebed",
+   "fieldtype": "Section Break"
+  },
+  {
+   "depends_on": "total_allocated_amount",
+   "fieldname": "get_outstanding_invoices",
+   "fieldtype": "Button",
+   "label": "Get Outstanding Invoices"
+  },
+  {
+   "depends_on": "eval:doc.payment_type == 'Receive' && doc.total_allocated_amount > 0",
+   "fieldname": "vouchers_payment_references",
+   "fieldtype": "Table",
+   "label": "Vouchers Payment References",
+   "options": "Vouchers Ref Child"
+  },
+  {
+   "depends_on": "eval:doc.payment_type == 'Pay' && doc.total_allocated_amount > 0",
+   "fieldname": "vouchers_payment_references2",
+   "fieldtype": "Table",
+   "label": "Vouchers Payment References",
+   "options": "Vouchers Ref Child 2"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "is_submittable": 1,
+ "links": [
+  {
+   "is_child_table": 1,
+   "link_doctype": "Bank Transaction Payments",
+   "link_fieldname": "payment_entry",
+   "parent_doctype": "Bank Transaction",
+   "table_fieldname": "payment_entries"
+  }
+ ],
+ "modified": "2025-12-29 17:08:38.669723",
+ "modified_by": "Administrator",
+ "module": "Voucher Management",
+ "name": "Vouchers Entry",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "amend": 1,
+   "cancel": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts User",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "amend": 1,
+   "cancel": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "show_name_in_global_search": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "title",
+ "track_changes": 1
+}
