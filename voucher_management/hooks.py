@@ -21,6 +21,11 @@ app_license = "mit"
 # 	}
 # ]
 
+accounting_dimension_doctypes = [
+    "Vouchers Entry",
+    "Voucher Entry Account"
+    ]
+
 # Includes in <head>
 # ------------------
 
