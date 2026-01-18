@@ -72,6 +72,7 @@ def make_journal_entry(doc):
                         je.append("accounts", {
                             "account": row.account, "party_type": row.party_type, "party": row.party,
                             "credit_in_account_currency": flt(alloc.allocated_amount),
+                            "project": row.project,
                             "reference_type": alloc.reference_doctype, "reference_name": alloc.reference_name,
                             "cost_center": row.cost_center
                         })
@@ -80,7 +81,7 @@ def make_journal_entry(doc):
             remaining = flt(row.amount_before_tax) - total_allocated
             if remaining > 0:
                 je.append("accounts", {
-                    "account": row.account, "party_type": row.party_type, "party": row.party,
+                    "account": row.account, "party_type": row.party_type, "party": row.party, "project": row.project,
                     "credit_in_account_currency": remaining, "cost_center": row.cost_center
                 })
             
@@ -105,7 +106,7 @@ def make_journal_entry(doc):
                 for alloc in doc.get("vouchers_payment_references2"):
                     if alloc.suppiler == row.party:
                         je.append("accounts", {
-                            "account": row.account, "party_type": row.party_type, "party": row.party,
+                            "account": row.account, "party_type": row.party_type, "party": row.party, "project": row.project,
                             "debit_in_account_currency": flt(alloc.allocated_amount),
                             "reference_type": alloc.reference_doctype, "reference_name": alloc.reference_name,
                             "cost_center": row.cost_center
@@ -115,7 +116,7 @@ def make_journal_entry(doc):
             remaining = flt(row.amount_before_tax) - total_allocated
             if remaining > 0:
                 je.append("accounts", {
-                    "account": row.account, "party_type": row.party_type, "party": row.party,
+                    "account": row.account, "party_type": row.party_type, "party": row.party, "project": row.project,
                     "debit_in_account_currency": remaining, "cost_center": row.cost_center
                 })
 
