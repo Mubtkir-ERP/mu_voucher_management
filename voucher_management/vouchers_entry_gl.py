@@ -57,6 +57,13 @@ def make_journal_entry(doc):
     
     # --- منطق الاستلام (Receive) ---
     if doc.payment_type == "Receive":
+        je.append("accounts", {
+            "account": doc.account_payment,
+            "debit_in_account_currency": flt(doc.amount_after_tax),
+            "credit_in_account_currency": 0,
+            "cost_center": doc.cost_center,
+            "user_remark": remarks
+        })
         for row in doc.references:
             total_allocated = 0
             if doc.get("vouchers_payment_references"):
@@ -87,13 +94,7 @@ def make_journal_entry(doc):
         if tax_account and flt(doc.total_taxes) > 0:
             je.append("accounts", {"account": tax_account, "credit_in_account_currency": flt(doc.total_taxes), "cost_center": doc.cost_center, "user_remark": remarks})
 
-        je.append("accounts", {
-            "account": doc.account_payment,
-            "debit_in_account_currency": flt(doc.amount_after_tax),
-            "credit_in_account_currency": 0,
-            "cost_center": doc.cost_center,
-            "user_remark": remarks
-        })
+        
     # --- منطق الدفع (Pay) ---
     elif doc.payment_type == "Pay":
 
