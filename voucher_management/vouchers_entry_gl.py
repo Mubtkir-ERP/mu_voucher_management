@@ -56,6 +56,7 @@ def make_journal_entry(doc):
     tax_account = None
     
     # --- منطق الاستلام (Receive) ---
+    remarks = doc.references[0].user_remark if doc.references else None
     if doc.payment_type == "Receive":
         je.append("accounts", {
             "account": doc.account_payment,
