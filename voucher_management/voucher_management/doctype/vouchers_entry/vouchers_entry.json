@@ -297,6 +297,7 @@
    "fieldname": "account_payment",
    "fieldtype": "Link",
    "label": "Account",
+   "allow_on_submit": 1,
    "options": "Account"
   },
   {
