@@ -186,6 +186,32 @@ def create_gl_entries(doc):
             "remarks": remarks,
         }))
 
+    # --- منطق التحويل الداخلي (Internal Transfer) ---
+    elif doc.payment_type == "Internal Transfer":
+        remarks = doc.remarks or ""
+        
+        # Credit the source account (paid_from)
+        gl_entries.append(get_gl_dict(doc, {
+            "account": doc.paid_from,
+            "credit": flt(doc.paid_amount),
+            "credit_in_account_currency": flt(doc.paid_amount),
+            "debit": 0,
+            "debit_in_account_currency": 0,
+            "cost_center": doc.cost_center,
+            "remarks": remarks,
+        }))
+        
+        # Debit the target account (paid_to)
+        gl_entries.append(get_gl_dict(doc, {
+            "account": doc.paid_to,
+            "debit": flt(doc.paid_amount),
+            "debit_in_account_currency": flt(doc.paid_amount),
+            "credit": 0,
+            "credit_in_account_currency": 0,
+            "cost_center": doc.cost_center,
+            "remarks": remarks,
+        }))
+
     if gl_entries:
         make_gl_entries(gl_entries)
         frappe.msgprint(_("تم إنشاء قيود دفتر الأستاذ بنجاح"))
