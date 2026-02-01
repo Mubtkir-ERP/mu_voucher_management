@@ -107,6 +107,7 @@
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Mode of Payment",
+   "allow_on_submit": 1,
    "options": "Mode of Payment"
   },
   {
@@ -231,6 +232,7 @@
    "fieldname": "remarks",
    "fieldtype": "Small Text",
    "label": "Notes",
+   "allow_on_submit": 1,
    "no_copy": 1
   },
   {
@@ -295,6 +297,7 @@
    "fieldname": "account_payment",
    "fieldtype": "Link",
    "label": "Account",
+   "allow_on_submit": 1,
    "options": "Account"
   },
   {
