@@ -107,7 +107,7 @@
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Mode of Payment",
-   "allow_on_submit": 1,
+  
    "options": "Mode of Payment"
   },
   {
@@ -297,7 +297,7 @@
    "fieldname": "account_payment",
    "fieldtype": "Link",
    "label": "Account",
-   "allow_on_submit": 1,
+   
    "options": "Account"
   },
   {
@@ -311,7 +311,7 @@
    "read_only": 1
   },
   {
-   "allow_on_submit": 1,
+  
    "bold": 1,
    "fieldname": "journal_entry",
    "fieldtype": "Link",
