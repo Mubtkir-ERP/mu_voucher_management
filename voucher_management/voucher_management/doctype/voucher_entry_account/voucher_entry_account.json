@@ -42,7 +42,7 @@
    "options": "Account",
    "print_width": "250px",
    "search_index": 1,
-   
+   "Mandatory": 1,
    "width": "250px"
   },
   {
