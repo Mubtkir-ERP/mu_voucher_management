@@ -9,13 +9,63 @@ def on_submit(doc, method=None):
 
 def on_cancel(doc, method=None):
     """عند الإلغاء: إلغاء قيود دفتر الأستاذ"""
-    make_reverse_gl_entries(voucher_type=doc.doctype, voucher_no=doc.name)
-    frappe.msgprint(_("تم إلغاء قيود دفتر الأستاذ بنجاح"))
+    # Delete all linked Payment Ledger Entries first
+    ple_entries = frappe.get_all("Payment Ledger Entry", 
+        filters={
+            "voucher_type": doc.doctype,
+            "voucher_no": doc.name
+        },
+        pluck="name"
+    )
+    
+    for ple in ple_entries:
+        frappe.delete_doc("Payment Ledger Entry", ple, force=True, ignore_permissions=True)
+    
+    # Delete all linked GL Entries to allow cancellation
+    gl_entries = frappe.get_all("GL Entry", 
+        filters={
+            "voucher_type": doc.doctype,
+            "voucher_no": doc.name
+        },
+        pluck="name"
+    )
+    
+    for gl_entry in gl_entries:
+        frappe.delete_doc("GL Entry", gl_entry, force=True, ignore_permissions=True)
+    
+    deleted_count = len(gl_entries) + len(ple_entries)
+    if deleted_count:
+        frappe.msgprint(_("تم إلغاء {} قيود بنجاح").format(deleted_count))
 
 def on_trash(doc, method=None):
-    """عند حذف السند نهائياً"""
-    # GL Entries are automatically deleted when the voucher is deleted
-    pass
+    """عند حذف السند نهائياً - حذف قيود دفتر الأستاذ المرتبطة"""
+    # Delete all linked Payment Ledger Entries first
+    ple_entries = frappe.get_all("Payment Ledger Entry", 
+        filters={
+            "voucher_type": doc.doctype,
+            "voucher_no": doc.name
+        },
+        pluck="name"
+    )
+    
+    for ple in ple_entries:
+        frappe.delete_doc("Payment Ledger Entry", ple, force=True, ignore_permissions=True)
+    
+    # Delete all linked GL Entries before deleting the voucher
+    gl_entries = frappe.get_all("GL Entry", 
+        filters={
+            "voucher_type": doc.doctype,
+            "voucher_no": doc.name
+        },
+        pluck="name"
+    )
+    
+    for gl_entry in gl_entries:
+        frappe.delete_doc("GL Entry", gl_entry, force=True, ignore_permissions=True)
+    
+    deleted_count = len(gl_entries) + len(ple_entries)
+    if deleted_count:
+        frappe.msgprint(_("تم حذف {} قيود مرتبطة").format(deleted_count))
 
 def get_gl_dict(doc, args, account_currency=None):
     """إنشاء قاموس قيد دفتر الأستاذ"""
