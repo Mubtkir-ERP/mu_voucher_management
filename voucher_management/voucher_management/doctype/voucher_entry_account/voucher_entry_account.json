@@ -42,7 +42,7 @@
    "options": "Account",
    "print_width": "250px",
    "search_index": 1,
-   "allow_on_submit": 1,
+   "Mandatory": 1,
    "width": "250px"
   },
   {
@@ -63,7 +63,7 @@
    "in_list_view": 1,
    "label": "Party Type",
    "options": "DocType",
-   "allow_on_submit": 1,
+   
    "search_index": 1
   },
   {
@@ -72,7 +72,7 @@
    "fieldtype": "Dynamic Link",
    "in_list_view": 1,
    "label": "Party",
-   "allow_on_submit": 1,
+   
    "options": "party_type"
   },
   {
@@ -132,7 +132,7 @@
    "in_list_view": 1,
    "label": "Taxes Type",
    "options": "Purchase Taxes and Charges Template",
-   "allow_on_submit": 1,
+   
    "print_hide_if_no_value": 1
   },
   {
@@ -143,7 +143,7 @@
    "in_list_view": 1,
    "label": "Tax Amount",
    "options": "account_currency",
-   "allow_on_submit": 1,
+  
    "print_hide_if_no_value": 1
   },
   {
@@ -154,7 +154,7 @@
    "in_list_view": 1,
    "label": "Amount",
    "options": "account_currency",
-   "allow_on_submit": 1,
+   
    "print_hide_if_no_value": 1
   },
   {
@@ -165,7 +165,7 @@
    "in_list_view": 1,
    "label": "Amount Before Tax",
    "options": "account_currency",
-   "allow_on_submit": 1,
+   
    "print_hide_if_no_value": 1
   },
   {
@@ -176,7 +176,7 @@
    "in_list_view": 1,
    "label": "Amount AfterTax",
    "options": "account_currency",
-   "allow_on_submit": 1,
+   
    "print_hide_if_no_value": 1
   },
   {

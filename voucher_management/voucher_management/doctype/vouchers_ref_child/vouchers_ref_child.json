@@ -27,7 +27,7 @@
  ],
  "fields": [
   {
-   "allow_on_submit": 1,
+   
    "columns": 2,
    "fieldname": "customer",
    "fieldtype": "Link",
