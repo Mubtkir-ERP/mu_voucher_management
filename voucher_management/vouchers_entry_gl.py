@@ -263,5 +263,9 @@ def create_gl_entries(doc):
         }))
 
     if gl_entries:
-        make_gl_entries(gl_entries)
+        merge_entries = frappe.db.get_single_value(
+        "Accounts Settings", 
+        "merge_similar_account_heads"
+    )
+        make_gl_entries(gl_entries, merge_entries=merge_entries)
         frappe.msgprint(_("تم إنشاء قيود دفتر الأستاذ بنجاح"))
