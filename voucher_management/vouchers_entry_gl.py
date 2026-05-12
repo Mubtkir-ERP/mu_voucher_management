@@ -22,40 +22,67 @@ def on_trash(doc, method=None):
 
 
 def on_update_after_submit(doc, method=None):
-    """Sync allowed post-submit field changes to GL and Payment Ledger entries.
+    """Sync only changed fields to GL and Payment Ledger entries.
 
-    Pass 1 — apply header-level values (remarks, header cost_center, header
-              dimensions) to every GL line for this voucher.
-    Pass 2 — override per-row GL lines (matched via voucher_detail_no) with
-              their own cost_center, user_remark, and row-level dimensions.
-    This preserves all GL Entry IDs and avoids any delete/re-create cycle.
+    Uses doc._doc_before_save to detect what actually changed, then
+    updates only those fields in the matching GL lines. This avoids
+    accidentally clearing existing dimension values.
     """
+    before = doc._doc_before_save
+    if not before:
+        return
+
     active_dims = get_accounting_dimensions()
     voucher_filter = {"voucher_type": doc.doctype, "voucher_no": doc.name}
 
-    # --- Pass 1: header-level defaults applied to all GL lines ---
-    header_update = {"remarks": doc.remarks or "", "cost_center": doc.cost_center}
-    for fieldname in active_dims:
-        header_update[fieldname] = doc.get(fieldname) or None
+    # --- Header-level changes: apply to all GL lines ---
+    header_updates = {}
+    if doc.remarks != before.remarks:
+        header_updates["remarks"] = doc.remarks or ""
+    if doc.cost_center != before.cost_center:
+        header_updates["cost_center"] = doc.cost_center
+    for dim in active_dims:
+        if doc.get(dim) != before.get(dim):
+            header_updates[dim] = doc.get(dim)
 
-    frappe.db.set_value("GL Entry", voucher_filter, header_update, update_modified=True)
-    frappe.db.set_value("Payment Ledger Entry", voucher_filter, header_update, update_modified=True)
+    if header_updates:
+        frappe.db.set_value("GL Entry", voucher_filter, header_updates, update_modified=True)
+        frappe.db.set_value("Payment Ledger Entry", voucher_filter, header_updates, update_modified=True)
 
-    # --- Pass 2: per-row overrides matched by voucher_detail_no ---
+    # --- Row-level changes: apply only to that row's GL lines ---
+    before_rows = {r.name: r for r in (before.references or [])}
+    updated = False
+
     for row in (doc.references or []):
-        row_update = {
-            "cost_center": row.cost_center or doc.cost_center,
-            "remarks": row.user_remark or doc.remarks or "",
-        }
-        # Row-level dimensions take priority over header-level values
-        for fieldname in active_dims:
-            row_update[fieldname] = row.get(fieldname) or doc.get(fieldname) or None
+        old = before_rows.get(row.name)
+        if not old:
+            continue
+
+        row_updates = {}
+        if row.user_remark != old.user_remark:
+            row_updates["remarks"] = row.user_remark or doc.remarks or ""
+        if row.cost_center != old.cost_center:
+            row_updates["cost_center"] = row.cost_center
+        for dim in active_dims:
+            if row.get(dim) != old.get(dim):
+                row_updates[dim] = row.get(dim)
+
+        if not row_updates:
+            continue
 
         row_filter = {**voucher_filter, "voucher_detail_no": row.name}
-        frappe.db.set_value("GL Entry", row_filter, row_update, update_modified=True)
-        frappe.db.set_value("Payment Ledger Entry", row_filter, row_update, update_modified=True)
+        if frappe.db.count("GL Entry", row_filter):
+            # New entries: match precisely by voucher_detail_no
+            frappe.db.set_value("GL Entry", row_filter, row_updates, update_modified=True)
+            frappe.db.set_value("Payment Ledger Entry", row_filter, row_updates, update_modified=True)
+        else:
+            # Fallback for old entries without voucher_detail_no
+            frappe.db.set_value("GL Entry", voucher_filter, row_updates, update_modified=True)
+            frappe.db.set_value("Payment Ledger Entry", voucher_filter, row_updates, update_modified=True)
+        updated = True
 
-    frappe.msgprint(_("GL entries updated successfully."))
+    if header_updates or updated:
+        frappe.msgprint(_("GL entries updated successfully."))
 
 
 # ---------------------------------------------------------------------------
