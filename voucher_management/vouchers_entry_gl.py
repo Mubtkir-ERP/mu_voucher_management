@@ -22,66 +22,85 @@ def on_trash(doc, method=None):
 
 
 def on_update_after_submit(doc, method=None):
-    """Sync only changed fields to GL and Payment Ledger entries.
+    """Sync changed fields to GL and Payment Ledger entries.
 
-    Uses doc._doc_before_save to detect what actually changed, then
-    updates only those fields in the matching GL lines. This avoids
-    accidentally clearing existing dimension values.
+    Uses doc._doc_before_save to detect what changed and update only those
+    fields. Falls back to a safe full-update when _doc_before_save is not
+    available (never clears existing values by skipping None/empty fields).
     """
-    before = doc._doc_before_save
-    if not before:
-        return
-
     active_dims = get_accounting_dimensions()
     voucher_filter = {"voucher_type": doc.doctype, "voucher_no": doc.name}
+    before = getattr(doc, "_doc_before_save", None)
 
-    # --- Header-level changes: apply to all GL lines ---
-    header_updates = {}
-    if doc.remarks != before.remarks:
-        header_updates["remarks"] = doc.remarks or ""
-    if doc.cost_center != before.cost_center:
-        header_updates["cost_center"] = doc.cost_center
-    for dim in active_dims:
-        if doc.get(dim) != before.get(dim):
-            header_updates[dim] = doc.get(dim)
+    if before:
+        # --- Diff mode: only push fields that actually changed ---
+        header_updates = {}
+        if doc.remarks != before.remarks:
+            header_updates["remarks"] = doc.remarks or ""
+        if doc.cost_center != before.cost_center:
+            header_updates["cost_center"] = doc.cost_center
+        for dim in active_dims:
+            if doc.get(dim) != before.get(dim):
+                header_updates[dim] = doc.get(dim)
 
+        before_rows = {r.name: r for r in (before.references or [])}
+        row_updates_map = {}
+        for row in (doc.references or []):
+            old = before_rows.get(row.name)
+            if not old:
+                continue
+            ru = {}
+            if row.user_remark != old.user_remark:
+                ru["remarks"] = row.user_remark or doc.remarks or ""
+            if row.cost_center != old.cost_center:
+                ru["cost_center"] = row.cost_center
+            for dim in active_dims:
+                if row.get(dim) != old.get(dim):
+                    ru[dim] = row.get(dim)
+            if ru:
+                row_updates_map[row.name] = ru
+    else:
+        # --- Safe full-update mode: update all non-empty fields ---
+        header_updates = {"remarks": doc.remarks or "", "cost_center": doc.cost_center}
+        for dim in active_dims:
+            val = doc.get(dim)
+            if val:
+                header_updates[dim] = val
+
+        row_updates_map = {}
+        for row in (doc.references or []):
+            ru = {}
+            if row.user_remark or doc.remarks:
+                ru["remarks"] = row.user_remark or doc.remarks or ""
+            if row.cost_center:
+                ru["cost_center"] = row.cost_center
+            for dim in active_dims:
+                val = row.get(dim) or doc.get(dim)
+                if val:
+                    ru[dim] = val
+            if ru:
+                row_updates_map[row.name] = ru
+
+    # Apply header-level updates to all GL lines
     if header_updates:
         frappe.db.set_value("GL Entry", voucher_filter, header_updates, update_modified=True)
         frappe.db.set_value("Payment Ledger Entry", voucher_filter, header_updates, update_modified=True)
 
-    # --- Row-level changes: apply only to that row's GL lines ---
-    before_rows = {r.name: r for r in (before.references or [])}
-    updated = False
-
+    # Apply row-level updates matched by voucher_detail_no
     for row in (doc.references or []):
-        old = before_rows.get(row.name)
-        if not old:
+        ru = row_updates_map.get(row.name)
+        if not ru:
             continue
-
-        row_updates = {}
-        if row.user_remark != old.user_remark:
-            row_updates["remarks"] = row.user_remark or doc.remarks or ""
-        if row.cost_center != old.cost_center:
-            row_updates["cost_center"] = row.cost_center
-        for dim in active_dims:
-            if row.get(dim) != old.get(dim):
-                row_updates[dim] = row.get(dim)
-
-        if not row_updates:
-            continue
-
         row_filter = {**voucher_filter, "voucher_detail_no": row.name}
         if frappe.db.count("GL Entry", row_filter):
-            # New entries: match precisely by voucher_detail_no
-            frappe.db.set_value("GL Entry", row_filter, row_updates, update_modified=True)
-            frappe.db.set_value("Payment Ledger Entry", row_filter, row_updates, update_modified=True)
+            frappe.db.set_value("GL Entry", row_filter, ru, update_modified=True)
+            frappe.db.set_value("Payment Ledger Entry", row_filter, ru, update_modified=True)
         else:
             # Fallback for old entries without voucher_detail_no
-            frappe.db.set_value("GL Entry", voucher_filter, row_updates, update_modified=True)
-            frappe.db.set_value("Payment Ledger Entry", voucher_filter, row_updates, update_modified=True)
-        updated = True
+            frappe.db.set_value("GL Entry", voucher_filter, ru, update_modified=True)
+            frappe.db.set_value("Payment Ledger Entry", voucher_filter, ru, update_modified=True)
 
-    if header_updates or updated:
+    if header_updates or row_updates_map:
         frappe.msgprint(_("GL entries updated successfully."))
 
 
