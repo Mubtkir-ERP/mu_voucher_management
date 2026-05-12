@@ -254,6 +254,8 @@ doc_events = {
     "Vouchers Entry": {
         "on_submit": "voucher_management.vouchers_entry_gl.on_submit",
         "on_cancel": "voucher_management.vouchers_entry_gl.on_cancel",
-        "on_trash": "voucher_management.vouchers_entry_gl.on_trash"
+        "on_trash": "voucher_management.vouchers_entry_gl.on_trash",
+        # Regenerate GL when an allow_on_submit field (e.g. cost_center, dimensions) changes
+        "on_update_after_submit": "voucher_management.vouchers_entry_gl.on_update_after_submit",
     }
 }

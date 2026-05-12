@@ -144,15 +144,18 @@ frappe.ui.form.on('Vouchers Entry', {
     }
 });
 
-// أحداث جداول الـ Child Tables
+// Child table events for the accounts grid
 frappe.ui.form.on('Voucher Entry Account', {
-    amount: function(frm, cdt, cdn) { compute_tax_for_row_v2(frm, cdt, cdn); },
-    taxes: function(frm, cdt, cdn) { compute_tax_for_row_v2(frm, cdt, cdn); },
-    party: function(frm, cdt, cdn) { set_party_account_safely(frm, cdt, cdn); },
-    references_add: function(frm, cdt, cdn) {
-        let p_type = (frm.doc.payment_type === 'Receive') ? 'Customer' : (frm.doc.payment_type === 'Pay' ? 'Supplier' : '');
+    amount:           (frm, cdt, cdn) => compute_tax_for_row(frm, cdt, cdn),
+    taxes:            (frm, cdt, cdn) => compute_tax_for_row(frm, cdt, cdn),
+    party:            (frm, cdt, cdn) => set_party_account_safely(frm, cdt, cdn),
+    references_add:   (frm, cdt, cdn) => {
+        // Pre-fill party_type based on the payment direction
+        let p_type = frm.doc.payment_type === 'Receive' ? 'Customer'
+                   : frm.doc.payment_type === 'Pay'     ? 'Supplier' : '';
         frappe.model.set_value(cdt, cdn, 'party_type', p_type);
-    }
+    },
+    references_remove: (frm) => recalc_totals(frm),  // recalculate when a row is deleted
 });
 
 // --- وظائف مساعدة معالجة البيانات ---
@@ -203,33 +206,45 @@ function set_party_account_safely(frm, cdt, cdn) {
     });
 }
 
-function compute_tax_for_row_v2(frm, cdt, cdn) {
+function compute_tax_for_row(frm, cdt, cdn) {
     let row = locals[cdt][cdn];
     let amount = flt(row.amount);
+
     if (!row.taxes || amount === 0) {
-        frappe.model.set_value(cdt, cdn, { tax_amount: 0, amount_before_tax: amount, amount_after_tax: amount });
-        recalc_totals_v2(frm);
+        // Update the row model directly (synchronous) then recalculate
+        row.tax_amount        = 0;
+        row.amount_before_tax = amount;
+        row.amount_after_tax  = amount;
+        frm.refresh_field('references');
+        recalc_totals(frm);
         return;
     }
-    frappe.db.get_doc('Purchase Taxes and Charges Template', row.taxes).then(doc => {
-        let sumRate = (doc.taxes || []).reduce((a, b) => a + flt(b.rate), 0);
-        let tax = flt(amount * (sumRate / 100), 2);
-        frappe.model.set_value(cdt, cdn, { tax_amount: tax, amount_before_tax: amount, amount_after_tax: flt(amount + tax, 2) });
-        recalc_totals_v2(frm);
+
+    frappe.db.get_doc('Purchase Taxes and Charges Template', row.taxes).then(tmpl => {
+        let rate = (tmpl.taxes || []).reduce((sum, t) => sum + flt(t.rate), 0);
+        let tax  = flt(amount * rate / 100, 2);
+        // Update the row model directly (synchronous) then recalculate
+        row.tax_amount        = tax;
+        row.amount_before_tax = amount;
+        row.amount_after_tax  = flt(amount + tax, 2);
+        frm.refresh_field('references');
+        recalc_totals(frm);
     });
 }
 
-function recalc_totals_v2(frm) {
-    let total_alloc = 0, total_tax = 0;
-    (frm.doc.references || []).forEach(r => { 
-        total_alloc += flt(r.amount_before_tax); 
-        total_tax += flt(r.tax_amount); 
+function recalc_totals(frm) {
+    let total = 0, tax = 0;
+    (frm.doc.references || []).forEach(r => {
+        total += flt(r.amount_before_tax);
+        tax   += flt(r.tax_amount);
     });
-    frm.set_value({ 
-        total_allocated_amount: total_alloc, 
-        total_taxes: total_tax, 
-        amount_after_tax: total_alloc + total_tax 
-    });
+    // Write directly to frm.doc then refresh — avoids async frm.set_value race conditions
+    frm.doc.total_allocated_amount = total;
+    frm.doc.total_taxes            = tax;
+    frm.doc.amount_after_tax       = total + tax;
+    frm.refresh_field('total_allocated_amount');
+    frm.refresh_field('total_taxes');
+    frm.refresh_field('amount_after_tax');
 }
 
 function apply_vouchers_filters(frm) {
