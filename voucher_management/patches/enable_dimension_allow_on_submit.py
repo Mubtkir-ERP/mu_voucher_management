@@ -13,15 +13,16 @@ def execute():
         get_accounting_dimensions,
     )
 
-    child_doctype = "Voucher Entry Account"
-    dimension_fieldnames = get_accounting_dimensions()
+    doctypes = ["Vouchers Entry", "Voucher Entry Account"]
+    dimension_fieldnames = get_accounting_dimensions() + ["custom_project", "project"]
 
-    for fieldname in dimension_fieldnames:
-        custom_field = frappe.db.get_value(
-            "Custom Field", {"dt": child_doctype, "fieldname": fieldname}, "name"
-        )
-        if custom_field:
-            frappe.db.set_value("Custom Field", custom_field, "allow_on_submit", 1)
+    for dt in doctypes:
+        for fieldname in dimension_fieldnames:
+            custom_field = frappe.db.get_value(
+                "Custom Field", {"dt": dt, "fieldname": fieldname}, "name"
+            )
+            if custom_field:
+                frappe.db.set_value("Custom Field", custom_field, "allow_on_submit", 1)
 
-    if dimension_fieldnames:
-        frappe.clear_cache(doctype=child_doctype)
+        if dimension_fieldnames:
+            frappe.clear_cache(doctype=dt)

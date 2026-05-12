@@ -22,67 +22,15 @@ def on_trash(doc, method=None):
 
 
 def on_update_after_submit(doc, method=None):
-    """Sync only changed fields to GL and Payment Ledger entries.
+    """Regenerate GL and Payment Ledger entries when allow_on_submit fields change.
 
-    Uses doc._doc_before_save to detect what actually changed, then
-    updates only those fields in the matching GL lines. This avoids
-    accidentally clearing existing dimension values.
+    Mirrors standard ERPNext reposting behavior (e.g. Journal Entry reposting):
+    completely deletes the old ledger entries for this voucher and freshly builds
+    them using current header and row field values. This natively guarantees every
+    single added, modified, or cleared dimension/field is flawlessly synchronized.
     """
-    before = doc._doc_before_save
-    if not before:
-        return
-
-    active_dims = get_accounting_dimensions()
-    voucher_filter = {"voucher_type": doc.doctype, "voucher_no": doc.name}
-
-    # --- Header-level changes: apply to all GL lines ---
-    header_updates = {}
-    if doc.remarks != before.remarks:
-        header_updates["remarks"] = doc.remarks or ""
-    if doc.cost_center != before.cost_center:
-        header_updates["cost_center"] = doc.cost_center
-    for dim in active_dims:
-        if doc.get(dim) != before.get(dim):
-            header_updates[dim] = doc.get(dim)
-
-    if header_updates:
-        frappe.db.set_value("GL Entry", voucher_filter, header_updates, update_modified=True)
-        frappe.db.set_value("Payment Ledger Entry", voucher_filter, header_updates, update_modified=True)
-
-    # --- Row-level changes: apply only to that row's GL lines ---
-    before_rows = {r.name: r for r in (before.references or [])}
-    updated = False
-
-    for row in (doc.references or []):
-        old = before_rows.get(row.name)
-        if not old:
-            continue
-
-        row_updates = {}
-        if row.user_remark != old.user_remark:
-            row_updates["remarks"] = row.user_remark or doc.remarks or ""
-        if row.cost_center != old.cost_center:
-            row_updates["cost_center"] = row.cost_center
-        for dim in active_dims:
-            if row.get(dim) != old.get(dim):
-                row_updates[dim] = row.get(dim)
-
-        if not row_updates:
-            continue
-
-        row_filter = {**voucher_filter, "voucher_detail_no": row.name}
-        if frappe.db.count("GL Entry", row_filter):
-            # New entries: match precisely by voucher_detail_no
-            frappe.db.set_value("GL Entry", row_filter, row_updates, update_modified=True)
-            frappe.db.set_value("Payment Ledger Entry", row_filter, row_updates, update_modified=True)
-        else:
-            # Fallback for old entries without voucher_detail_no
-            frappe.db.set_value("GL Entry", voucher_filter, row_updates, update_modified=True)
-            frappe.db.set_value("Payment Ledger Entry", voucher_filter, row_updates, update_modified=True)
-        updated = True
-
-    if header_updates or updated:
-        frappe.msgprint(_("GL entries updated successfully."))
+    _delete_gl_and_ple(doc)
+    create_gl_entries(doc)
 
 
 # ---------------------------------------------------------------------------
@@ -92,12 +40,8 @@ def on_update_after_submit(doc, method=None):
 def _delete_gl_and_ple(doc):
     """Remove all GL Entry and Payment Ledger Entry records for this voucher."""
     filters = {"voucher_type": doc.doctype, "voucher_no": doc.name}
-
-    for ple in frappe.get_all("Payment Ledger Entry", filters=filters, pluck="name"):
-        frappe.delete_doc("Payment Ledger Entry", ple, force=True, ignore_permissions=True)
-
-    for gle in frappe.get_all("GL Entry", filters=filters, pluck="name"):
-        frappe.delete_doc("GL Entry", gle, force=True, ignore_permissions=True)
+    frappe.db.delete("Payment Ledger Entry", filters=filters)
+    frappe.db.delete("GL Entry", filters=filters)
 
 
 def _get_dimension_values(doc):
@@ -108,18 +52,27 @@ def _get_dimension_values(doc):
     so they can be injected into every GL line that belongs to the header.
     """
     dimensions = {}
-    for fieldname in get_accounting_dimensions():
-        value = doc.get(fieldname)
+    if getattr(doc, "custom_project", None):
+        dimensions["project"] = doc.custom_project
+
+    # Guarantee customer and supplier are included even if not cached in standard dimensions list
+    dim_fields = get_accounting_dimensions()
+    for extra in ["customer", "supplier"]:
+        if extra not in dim_fields:
+            dim_fields.append(extra)
+
+    for fieldname in dim_fields:
+        value = doc.get(fieldname) or doc.get(f"custom_{fieldname}")
         if value:
             dimensions[fieldname] = value
     return dimensions
 
 
-def _build_gl_dict(doc, args, header_dimensions):
+def _build_gl_dict(doc, args, header_dimensions, row=None):
     """Build a single GL Entry dict, merging header dimensions with row-level overrides.
 
-    Row-level dimensions (passed inside `args`) take priority over header-level ones,
-    so a child-table row can override the parent's dimension if needed.
+    Row-level dimensions (passed inside `args` or extracted from `row`) take priority
+    over header-level ones, so a child-table row can override the parent's dimension.
     """
     # Start with base fields common to all entries
     gl_dict = frappe._dict({
@@ -134,6 +87,18 @@ def _build_gl_dict(doc, args, header_dimensions):
 
     # Apply header-level accounting dimensions first (lower priority)
     gl_dict.update(header_dimensions)
+
+    # Apply row-level accounting dimensions if row object is provided
+    if row:
+        dim_fields = get_accounting_dimensions()
+        for extra in ["customer", "supplier"]:
+            if extra not in dim_fields:
+                dim_fields.append(extra)
+
+        for fieldname in dim_fields:
+            val = row.get(fieldname) or row.get(f"custom_{fieldname}")
+            if val:
+                gl_dict[fieldname] = val
 
     # Apply row-specific overrides (higher priority — includes cost_center, party, etc.)
     gl_dict.update(args)
@@ -229,13 +194,13 @@ def _build_receive_entries(doc, gl_entries, header_dimensions):
                 "credit_in_account_currency": flt(alloc.allocated_amount),
                 "debit": 0,
                 "debit_in_account_currency": 0,
-                "project": row.project,
+                "project": row.project or getattr(doc, "custom_project", None),
                 "against_voucher_type": alloc.reference_doctype,
                 "against_voucher": alloc.reference_name,
                 "cost_center": row.cost_center,
                 "remarks": row_remarks,
                 "voucher_detail_no": row.name,
-            }, header_dimensions))
+            }, header_dimensions, row=row))
             total_allocated += flt(alloc.allocated_amount)
 
         # Credit: remaining unallocated amount
@@ -245,7 +210,7 @@ def _build_receive_entries(doc, gl_entries, header_dimensions):
                 "account": row.account,
                 "party_type": row.party_type,
                 "party": row.party,
-                "project": row.project,
+                "project": row.project or getattr(doc, "custom_project", None),
                 "credit": remaining,
                 "credit_in_account_currency": remaining,
                 "debit": 0,
@@ -253,7 +218,7 @@ def _build_receive_entries(doc, gl_entries, header_dimensions):
                 "cost_center": row.cost_center,
                 "remarks": row_remarks,
                 "voucher_detail_no": row.name,
-            }, header_dimensions))
+            }, header_dimensions, row=row))
 
         if not tax_account:
             tax_account = _get_tax_account(row)
@@ -292,7 +257,7 @@ def _build_pay_entries(doc, gl_entries, header_dimensions):
                 "account": row.account,
                 "party_type": row.party_type,
                 "party": row.party,
-                "project": row.project,
+                "project": row.project or getattr(doc, "custom_project", None),
                 "debit": flt(alloc.allocated_amount),
                 "debit_in_account_currency": flt(alloc.allocated_amount),
                 "credit": 0,
@@ -302,7 +267,7 @@ def _build_pay_entries(doc, gl_entries, header_dimensions):
                 "cost_center": row.cost_center,
                 "remarks": row_remarks,
                 "voucher_detail_no": row.name,
-            }, header_dimensions))
+            }, header_dimensions, row=row))
             total_allocated += flt(alloc.allocated_amount)
 
         # Debit: remaining unallocated amount
@@ -312,7 +277,7 @@ def _build_pay_entries(doc, gl_entries, header_dimensions):
                 "account": row.account,
                 "party_type": row.party_type,
                 "party": row.party,
-                "project": row.project,
+                "project": row.project or getattr(doc, "custom_project", None),
                 "debit": remaining,
                 "debit_in_account_currency": remaining,
                 "credit": 0,
@@ -320,7 +285,7 @@ def _build_pay_entries(doc, gl_entries, header_dimensions):
                 "cost_center": row.cost_center,
                 "remarks": row_remarks,
                 "voucher_detail_no": row.name,
-            }, header_dimensions))
+            }, header_dimensions, row=row))
 
         if not tax_account:
             tax_account = _get_tax_account(row)
