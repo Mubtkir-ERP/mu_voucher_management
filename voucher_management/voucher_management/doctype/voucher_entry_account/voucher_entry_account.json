@@ -9,6 +9,8 @@
  "field_order": [
   "account",
   "account_type",
+  "account_currency",
+  "exchange_rate",
   "col_break1",
   "party_type",
   "party",
@@ -19,10 +21,14 @@
   "sec_break1",
   "taxes",
   "amount",
+  "base_amount",
   "col_break2",
   "amount_before_tax",
   "tax_amount",
   "amount_after_tax",
+  "base_amount_before_tax",
+  "base_tax_amount",
+  "base_amount_after_tax",
   "reference",
   "company",
   "col_break3",
@@ -42,8 +48,18 @@
    "options": "Account",
    "print_width": "250px",
    "search_index": 1,
-   "Mandatory": 1,
+   "reqd": 1,
    "width": "250px"
+  },
+  {
+   "fetch_from": "account.account_currency",
+   "fieldname": "account_currency",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Account Currency",
+   "options": "Currency",
+   "print_hide": 1,
+   "read_only": 1
   },
   {
    "fetch_from": "account.account_type",
@@ -60,10 +76,8 @@
   {
    "fieldname": "party_type",
    "fieldtype": "Link",
-   "in_list_view": 1,
    "label": "Party Type",
    "options": "DocType",
-   
    "search_index": 1
   },
   {
@@ -72,7 +86,6 @@
    "fieldtype": "Dynamic Link",
    "in_list_view": 1,
    "label": "Party",
-   
    "options": "party_type"
   },
   {
@@ -93,7 +106,9 @@
    "options": "Cost Center",
    "print_hide": 1,
    "print_width": "180px",
-   "width": "180px"
+   "width": "180px",
+   "in_list_view": 1,
+   "columns": 2
   },
   {
    "fieldname": "dimension_col_break",
@@ -104,7 +119,9 @@
    "fieldname": "project",
    "fieldtype": "Link",
    "label": "Project",
-   "options": "Project"
+   "options": "Project",
+   "in_list_view": 1,
+   "columns": 2
   },
   {
    "fieldname": "sec_break1",
@@ -126,24 +143,18 @@
   },
   {
    "bold": 1,
-   "columns": 2,
    "fieldname": "taxes",
    "fieldtype": "Link",
-   "in_list_view": 1,
    "label": "Taxes Type",
    "options": "Purchase Taxes and Charges Template",
-   
    "print_hide_if_no_value": 1
   },
   {
    "bold": 1,
-   "columns": 2,
    "fieldname": "tax_amount",
    "fieldtype": "Currency",
-   "in_list_view": 1,
    "label": "Tax Amount",
    "options": "account_currency",
-  
    "print_hide_if_no_value": 1
   },
   {
@@ -154,29 +165,22 @@
    "in_list_view": 1,
    "label": "Amount",
    "options": "account_currency",
-   
    "print_hide_if_no_value": 1
   },
   {
    "bold": 1,
-   "columns": 2,
    "fieldname": "amount_before_tax",
    "fieldtype": "Currency",
-   "in_list_view": 1,
    "label": "Amount Before Tax",
    "options": "account_currency",
-   
    "print_hide_if_no_value": 1
   },
   {
    "bold": 1,
-   "columns": 2,
    "fieldname": "amount_after_tax",
    "fieldtype": "Currency",
-   "in_list_view": 1,
    "label": "Amount AfterTax",
    "options": "account_currency",
-   
    "print_hide_if_no_value": 1
   },
   {
@@ -192,6 +196,50 @@
    "fieldtype": "Link",
    "label": "Company",
    "options": "Company"
+  },
+  {
+   "fieldname": "exchange_rate",
+   "fieldtype": "Float",
+   "label": "Exchange Rate",
+   "precision": "9",
+   "description": "Auto-filled — edit if needed.",
+   "depends_on": "eval:doc.account_currency && doc.account_currency != parent.currency"
+  },
+  {
+   "fieldname": "base_amount",
+   "fieldtype": "Currency",
+   "label": "Amount (Company Currency)",
+   "options": "Company:company:default_currency",
+   "read_only": 1,
+   "print_hide": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "base_amount_before_tax",
+   "fieldtype": "Currency",
+   "label": "Amount Before Tax (Company Currency)",
+   "options": "Company:company:default_currency",
+   "read_only": 1,
+   "print_hide": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "base_tax_amount",
+   "fieldtype": "Currency",
+   "label": "Tax Amount (Company Currency)",
+   "options": "Company:company:default_currency",
+   "read_only": 1,
+   "print_hide": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "base_amount_after_tax",
+   "fieldtype": "Currency",
+   "label": "Amount After Tax (Company Currency)",
+   "options": "Company:company:default_currency",
+   "read_only": 1,
+   "print_hide": 1,
+   "no_copy": 1
   }
  ],
  "istable": 1,

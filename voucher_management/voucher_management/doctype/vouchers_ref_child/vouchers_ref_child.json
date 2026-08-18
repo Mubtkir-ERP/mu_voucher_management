@@ -19,6 +19,7 @@
   "total_amount",
   "outstanding_amount",
   "allocated_amount",
+  "invoice_currency",
   "exchange_rate",
   "exchange_gain_loss",
   "account",
@@ -27,7 +28,6 @@
  ],
  "fields": [
   {
-   
    "columns": 2,
    "fieldname": "customer",
    "fieldtype": "Link",
@@ -106,7 +106,7 @@
   {
    "columns": 2,
    "fieldname": "total_amount",
-   "fieldtype": "Float",
+   "fieldtype": "Currency",
    "in_list_view": 1,
    "label": "Grand Total",
    "print_hide": 1,
@@ -115,7 +115,7 @@
   {
    "columns": 2,
    "fieldname": "outstanding_amount",
-   "fieldtype": "Float",
+   "fieldtype": "Currency",
    "in_list_view": 1,
    "label": "Outstanding",
    "read_only": 1
@@ -123,25 +123,27 @@
   {
    "columns": 2,
    "fieldname": "allocated_amount",
-   "fieldtype": "Float",
+   "fieldtype": "Currency",
    "in_list_view": 1,
    "label": "Allocated"
   },
   {
-   "depends_on": "eval:(doc.reference_doctype=='Purchase Invoice')",
    "fieldname": "exchange_rate",
    "fieldtype": "Float",
-   "label": "Exchange Rate",
+   "label": "Invoice Exchange Rate",
    "print_hide": 1,
-   "read_only": 1
+   "read_only": 1,
+   "precision": "9",
+   "default": "1",
+   "description": "The rate the invoice itself was booked at. The gap to the voucher rate is the realised gain or loss."
   },
   {
-   "depends_on": "exchange_gain_loss",
    "fieldname": "exchange_gain_loss",
    "fieldtype": "Currency",
    "label": "Exchange Gain/Loss",
-   "options": "Company:company:default_currency",
-   "read_only": 1
+   "read_only": 1,
+   "print_hide": 1,
+   "no_copy": 1
   },
   {
    "fieldname": "account",
@@ -163,6 +165,15 @@
    "is_virtual": 1,
    "label": "Payment Request Outstanding",
    "read_only": 1
+  },
+  {
+   "fieldname": "invoice_currency",
+   "fieldtype": "Link",
+   "options": "Currency",
+   "label": "Invoice Currency",
+   "read_only": 1,
+   "print_hide": 1,
+   "hidden": 1
   }
  ],
  "index_web_pages_for_search": 1,
