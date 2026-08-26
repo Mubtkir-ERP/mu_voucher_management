@@ -11,6 +11,10 @@ from erpnext.accounts.general_ledger import (
     validate_accounting_period,
 )
 
+from voucher_management.voucher_management.doctype.vouchers_entry.vouchers_entry import (
+    CURRENCY_PRECISION,
+)
+
 # Ledger rows survive cancellation with is_cancelled = 1 instead of being deleted, so
 # Frappe's generic "document is linked" guard has to be told to look past them.
 LEDGER_DOCTYPES = ("GL Entry", "Payment Ledger Entry")
@@ -305,7 +309,7 @@ def distribute_allocations(doc):
     if not allocations:
         return assignments
 
-    precision = doc.precision("total_allocated_amount")
+    precision = CURRENCY_PRECISION
     capacity = {row.name: flt(row.amount_before_tax, precision) for row in doc.references}
 
     for alloc in allocations:
@@ -347,6 +351,10 @@ def _validate_balance(doc, gl_entries):
     how much. Any genuine currency gap has already been booked to the exchange account by
     the time this runs, so what is left here is an error, not a rate.
     """
+    # GL Entry's own precision, not the voucher's. This measures the ledger rows we are
+    # about to hand over, and they are stored at whatever width GL Entry uses. Our figures
+    # arrive already settled at CURRENCY_PRECISION, so a wider ledger precision only makes
+    # this check stricter — never looser.
     precision = get_field_precision(
         frappe.get_meta("GL Entry").get_field("debit"),
         currency=frappe.get_cached_value("Company", doc.company, "default_currency"),
@@ -413,7 +421,7 @@ def _build_party_lines(doc, gl_entries, header_dimensions, direction):
     """
     header_remarks = doc.remarks or ""
     assignments = distribute_allocations(doc)
-    precision = doc.precision("total_allocated_amount")
+    precision = CURRENCY_PRECISION
 
     for row in doc.references:
         row_remarks = row.user_remark or header_remarks
@@ -476,7 +484,7 @@ def _build_tax_lines(doc, gl_entries, header_dimensions, direction):
 
 def _build_payment_line(doc, gl_entries, header_dimensions, direction):
     """The bank/cash side, carrying the gross amount in its own currency."""
-    precision = doc.precision("amount_after_tax")
+    precision = CURRENCY_PRECISION
     amount = flt(doc.payment_amount)
     base_amount = flt(amount * (flt(doc.payment_exchange_rate) or 1.0), precision)
 
@@ -496,6 +504,10 @@ def _build_exchange_difference_line(doc, gl_entries, header_dimensions):
     rather than the voucher rate. Whatever the two sides disagree by after every other line
     is written is, by definition, the realised gain or loss.
     """
+    # GL Entry's own precision, not the voucher's. This measures the ledger rows we are
+    # about to hand over, and they are stored at whatever width GL Entry uses. Our figures
+    # arrive already settled at CURRENCY_PRECISION, so a wider ledger precision only makes
+    # this check stricter — never looser.
     precision = get_field_precision(
         frappe.get_meta("GL Entry").get_field("debit"),
         currency=frappe.get_cached_value("Company", doc.company, "default_currency"),
@@ -546,7 +558,7 @@ def _build_transfer_entries(doc, gl_entries, header_dimensions):
     gap, which is the cost of the conversion itself.
     """
     remarks = doc.remarks or ""
-    precision = doc.precision("amount_after_tax")
+    precision = CURRENCY_PRECISION
 
     paid = flt(doc.paid_amount)
     received = flt(doc.received_amount) or paid

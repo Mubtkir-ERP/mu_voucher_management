@@ -11,13 +11,15 @@ left exactly as it was found. Pass `keep=True` to commit the fixtures instead, e
 """
 
 import frappe
-from frappe.utils import add_days, flt, getdate, nowdate
+from frappe.utils import add_days, cint, flt, getdate, nowdate
 
 from voucher_management.voucher_management.doctype.vouchers_entry.vouchers_entry import get_tax_breakup
 
 COMPANY = None
 ABBR = None
 ORIGINAL_FROZEN_UPTO = None
+# Set in run(). Never rebuild this name by hand — see ensure_account.
+WHT_ACCOUNT = None
 PREFIX = "VMCHK"
 
 RESULTS = []
@@ -61,9 +63,14 @@ def acc(number_and_name):
 
 
 def ensure_account(name, parent, account_type=None, root_type=None, currency=None):
-	full = f"{name} - {ABBR}"
-	if frappe.db.exists("Account", full):
-		return full
+	# Never assume the document name is "<account_name> - <abbr>". On a chart that uses
+	# account numbers ERPNext prefixes one automatically, so a freshly created
+	# "VMCHK WHT" comes back as "2301 - VMCHK WHT - K". Look it up by account_name and
+	# hand back whatever name the site actually gave it.
+	existing = frappe.db.get_value(
+		"Account", {"company": COMPANY, "account_name": name}, "name")
+	if existing:
+		return existing
 
 	doc = frappe.get_doc({
 		"doctype": "Account",
@@ -160,14 +167,23 @@ def make_sales_invoice(customer, rate, cost_center):
 	return doc
 
 
+BILL_SEQ = 0
+
+
 def make_purchase_invoice(supplier, rate, cost_center):
+	# A supplier invoice number has to be unique per supplier when
+	# `check_supplier_invoice_uniqueness` is on, and this run creates several for the same
+	# supplier. Number them rather than reusing one literal.
+	global BILL_SEQ
+	BILL_SEQ += 1
+
 	doc = frappe.get_doc({
 		"doctype": "Purchase Invoice",
 		"supplier": supplier,
 		"company": COMPANY,
 		"posting_date": nowdate(),
 		"due_date": add_days(nowdate(), 30),
-		"bill_no": f"{PREFIX}-BILL",
+		"bill_no": f"{PREFIX}-BILL-{BILL_SEQ:03d}",
 		"credit_to": acc("2110 - Creditors"),
 		"items": [{
 			"item_code": ensure_item(),
@@ -321,7 +337,7 @@ def check_negative_tax(templates, cc):
 	debit, credit = totals(entries)
 	check_eq("GL balanced", debit, credit)
 
-	wht = [e for e in entries if e.account == acc(f"{PREFIX} WHT")]
+	wht = [e for e in entries if e.account == WHT_ACCOUNT]
 	check("withholding line was posted", len(wht) == 1)
 	if wht:
 		check_eq("withholding is a credit of 50", wht[0].credit, 50)
@@ -351,7 +367,7 @@ def check_multi_tax_accounts(templates, cc):
 	check_eq("GL balanced", debit, credit)
 
 	vat = [e for e in entries if e.account == acc("VAT")]
-	wht = [e for e in entries if e.account == acc(f"{PREFIX} WHT")]
+	wht = [e for e in entries if e.account == WHT_ACCOUNT]
 	check("VAT line posted separately", len(vat) == 1)
 	check("WHT line posted separately", len(wht) == 1)
 	if vat:
@@ -1286,6 +1302,78 @@ def check_rounding(templates, cc):
 			 debit, flt(sum(awkward), 2))
 
 
+def check_precision_is_pinned():
+	print("\n[23] Money is pinned to two decimals inside the app only")
+
+	from frappe.model.meta import get_field_precision
+
+	from voucher_management.voucher_management.doctype.vouchers_entry.vouchers_entry import (
+		CURRENCY_PRECISION,
+		EXCHANGE_RATE_PRECISION,
+	)
+
+	money = {
+		"Vouchers Entry": ["paid_amount", "total_allocated_amount", "total_taxes",
+						   "amount_after_tax", "payment_amount", "received_amount",
+						   "exchange_difference"],
+		"Voucher Entry Account": ["amount", "amount_before_tax", "tax_amount",
+								  "amount_after_tax", "base_amount", "base_amount_before_tax",
+								  "base_tax_amount", "base_amount_after_tax"],
+		"Vouchers Ref Child": ["total_amount", "outstanding_amount", "allocated_amount",
+							   "exchange_gain_loss"],
+		"Vouchers Ref Child 2": ["total_amount", "outstanding_amount", "allocated_amount",
+								 "exchange_gain_loss"],
+	}
+
+	rates = {
+		"Vouchers Entry": ["payment_exchange_rate", "source_exchange_rate", "target_exchange_rate"],
+		"Voucher Entry Account": ["exchange_rate"],
+		"Vouchers Ref Child": ["exchange_rate"],
+		"Vouchers Ref Child 2": ["exchange_rate"],
+	}
+
+	drift = []
+	for doctype, fieldnames in money.items():
+		meta = frappe.get_meta(doctype)
+		for fieldname in fieldnames:
+			df = meta.get_field(fieldname)
+			# The JSON must carry the pin, not inherit it — a site whose System Settings
+			# say 3 has to still give this app 2.
+			if cint(df.precision) != CURRENCY_PRECISION or get_field_precision(df) != CURRENCY_PRECISION:
+				drift.append(f"{doctype}.{fieldname} json={df.precision!r} resolved={get_field_precision(df)}")
+
+	check("every money field is pinned to 2 in the DocType JSON", not drift, str(drift[:4]))
+
+	rate_drift = []
+	for doctype, fieldnames in rates.items():
+		meta = frappe.get_meta(doctype)
+		for fieldname in fieldnames:
+			df = meta.get_field(fieldname)
+			if cint(df.precision) != EXCHANGE_RATE_PRECISION:
+				rate_drift.append(f"{doctype}.{fieldname}={df.precision!r}")
+
+	check("exchange rates keep their 9 digits", not rate_drift, str(rate_drift))
+
+	# The whole point of pinning per field is to leave the rest of ERPNext alone. What
+	# makes that true is not the number a foreign field happens to resolve to — a blank
+	# `currency_precision` already makes most Currency fields land on 2 by themselves —
+	# but that nothing outside this app carries a pin we put there.
+	system_float = frappe.db.get_single_value("System Settings", "float_precision")
+	check("System Settings.float_precision was not narrowed to 2",
+		  cint(system_float) != CURRENCY_PRECISION, f"float_precision={system_float!r}")
+
+	outside = []
+	for doctype, fieldname in (("Journal Entry", "total_debit"),
+							   ("Payment Entry", "paid_amount"),
+							   ("Sales Invoice", "grand_total"),
+							   ("GL Entry", "debit")):
+		df = frappe.get_meta(doctype).get_field(fieldname)
+		if df and df.precision:
+			outside.append(f"{doctype}.{fieldname}={df.precision!r}")
+
+	check("no field outside this app was pinned", not outside, str(outside))
+
+
 def check_grid_budget():
 	print("\n[21] The child grid fits inside Frappe's column ceiling")
 
@@ -1375,7 +1463,9 @@ def run(keep=False):
 		duties = frappe.db.get_value("Account", {"company": COMPANY, "account_name": "Duties and Taxes"}, "name") \
 			or frappe.db.get_value("Account", {"company": COMPANY, "root_type": "Liability", "is_group": 1}, "name")
 
-		wht_account = ensure_account(f"{PREFIX} WHT", duties, account_type="Tax", root_type="Liability")
+		global WHT_ACCOUNT
+		wht_account = WHT_ACCOUNT = ensure_account(
+			f"{PREFIX} WHT", duties, account_type="Tax", root_type="Liability")
 		vat_account = acc("VAT")
 		cc = frappe.db.get_value("Cost Center", {"company": COMPANY, "is_group": 0}, "name")
 		cc2 = ensure_cost_center(f"{PREFIX} CC")
@@ -1422,6 +1512,7 @@ def run(keep=False):
 		check_exchange_difference_figure(cc)
 		check_header_dimensions_and_defaults(cc, cc2)
 		check_rounding(templates, cc)
+		check_precision_is_pinned()
 		check_grid_budget()
 
 	finally:
