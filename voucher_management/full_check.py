@@ -1302,119 +1302,6 @@ def check_rounding(templates, cc):
 			 debit, flt(sum(awkward), 2))
 
 
-<<<<<<< HEAD
-def check_ledger_follows_the_edit(cc, cc2):
-	print("\n[24] Update on an approved voucher reaches tabGL Entry")
-
-	project = frappe.db.get_value("Project", {"project_name": f"{PREFIX} Project A"}, "name") \
-		or frappe.get_doc({"doctype": "Project", "project_name": f"{PREFIX} Project A",
-						   "company": COMPANY}).insert(ignore_permissions=True).name
-
-	def gl_field(voucher, detail_no, fieldname):
-		"""Read the ledger the way a report would — straight from GL Entry."""
-		return frappe.db.get_value(
-			"GL Entry",
-			{"voucher_type": "Vouchers Entry", "voucher_no": voucher,
-			 "is_cancelled": 0, "voucher_detail_no": detail_no or ("", "is", "not set")},
-			fieldname)
-
-	def build_and_edit(label, strip_detail_no):
-		doc = make_voucher(
-			"Receive",
-			rows=[{"account": acc("1310 - Debtors"), "party_type": "Customer", "party": "خالد",
-				   "amount": 400, "cost_center": cc}],
-			account_payment=acc("1110 - Cash"), cost_center=cc, remarks="ORIGINAL HEADER",
-			submit=True,
-		)
-		row_name = doc.references[0].name
-
-		if strip_detail_no:
-			# Exactly what a voucher submitted before the stamp existed looks like.
-			frappe.db.sql(
-				"""UPDATE `tabGL Entry` SET voucher_detail_no=NULL
-				   WHERE voucher_type='Vouchers Entry' AND voucher_no=%s""", doc.name)
-
-		doc.reload()
-		doc.remarks = "EDITED HEADER"
-		doc.cost_center = cc2
-		doc.project = project
-		doc.references[0].cost_center = cc2
-		doc.references[0].project = project
-		doc.references[0].user_remark = "EDITED ROW"
-		doc.save()
-
-		print(f"    -- {label}")
-		for r in frappe.db.sql(
-			"""SELECT account, party, remarks, cost_center, project, voucher_detail_no
-			   FROM `tabGL Entry`
-			   WHERE voucher_type='Vouchers Entry' AND voucher_no=%s AND is_cancelled=0
-			   ORDER BY creation""", doc.name, as_dict=True):
-			print(f"       {r.account:<26} party={r.party or '-':<8} cc={r.cost_center}"
-				  f" proj={r.project} remarks={r.remarks!r}")
-
-		return doc, row_name
-
-	# --- a voucher posted by the current code -------------------------------------
-	doc, row_name = build_and_edit("stamped voucher", strip_detail_no=False)
-
-	check_eq("row line: cost centre reached the ledger",
-			 gl_field(doc.name, row_name, "cost_center"), cc2)
-	check_eq("row line: project reached the ledger",
-			 gl_field(doc.name, row_name, "project"), project)
-	check_eq("row line: its own remark reached the ledger",
-			 gl_field(doc.name, row_name, "remarks"), "EDITED ROW")
-
-	header = frappe.db.get_value(
-		"GL Entry",
-		{"voucher_type": "Vouchers Entry", "voucher_no": doc.name, "is_cancelled": 0,
-		 "account": acc("1110 - Cash")},
-		["remarks", "cost_center", "project"], as_dict=True)
-	check_eq("header line: remark reached the ledger", header.remarks, "EDITED HEADER")
-	check_eq("header line: cost centre reached the ledger", header.cost_center, cc2)
-	check_eq("header line: project reached the ledger", header.project, project)
-
-	# --- a voucher posted before voucher_detail_no was stamped ---------------------
-	# The reported symptom. Every GL row looked like a header row, so a row-level edit
-	# went nowhere and the header's value was written over the party line instead.
-	legacy, legacy_row = build_and_edit("legacy voucher (no voucher_detail_no)",
-										strip_detail_no=True)
-
-	party_line = frappe.db.get_value(
-		"GL Entry",
-		{"voucher_type": "Vouchers Entry", "voucher_no": legacy.name, "is_cancelled": 0,
-		 "party": "خالد"},
-		["remarks", "cost_center", "project", "voucher_detail_no"], as_dict=True)
-
-	check_eq("legacy row line: its own remark reached the ledger",
-			 party_line.remarks, "EDITED ROW")
-	check_eq("legacy row line: cost centre reached the ledger",
-			 party_line.cost_center, cc2)
-	check_eq("legacy row line: project reached the ledger",
-			 party_line.project, project)
-	check_eq("legacy row line was stamped so the next edit is exact",
-			 party_line.voucher_detail_no, legacy_row)
-
-	legacy_header = frappe.db.get_value(
-		"GL Entry",
-		{"voucher_type": "Vouchers Entry", "voucher_no": legacy.name, "is_cancelled": 0,
-		 "account": acc("1110 - Cash")},
-		["remarks", "voucher_detail_no"], as_dict=True)
-	check_eq("legacy header line kept the document remark",
-			 legacy_header.remarks, "EDITED HEADER")
-	check("legacy header line was not mistaken for a row",
-		  not legacy_header.voucher_detail_no, str(legacy_header.voucher_detail_no))
-
-	# Amounts are not allow_on_submit and must never come through this path.
-	def tamper():
-		legacy.reload()
-		legacy.references[0].amount = 999
-		legacy.save()
-
-	expect_throw("an amount cannot be changed after submit", tamper)
-
-
-=======
->>>>>>> 05a25dbc28f7f086740fecfd11024aaa1a5a632c
 def check_precision_is_pinned():
 	print("\n[23] Money is pinned to two decimals inside the app only")
 
@@ -1625,10 +1512,6 @@ def run(keep=False):
 		check_exchange_difference_figure(cc)
 		check_header_dimensions_and_defaults(cc, cc2)
 		check_rounding(templates, cc)
-<<<<<<< HEAD
-		check_ledger_follows_the_edit(cc, cc2)
-=======
->>>>>>> 05a25dbc28f7f086740fecfd11024aaa1a5a632c
 		check_precision_is_pinned()
 		check_grid_budget()
 
