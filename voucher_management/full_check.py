@@ -11,13 +11,15 @@ left exactly as it was found. Pass `keep=True` to commit the fixtures instead, e
 """
 
 import frappe
-from frappe.utils import add_days, flt, getdate, nowdate
+from frappe.utils import add_days, cint, flt, getdate, nowdate
 
 from voucher_management.voucher_management.doctype.vouchers_entry.vouchers_entry import get_tax_breakup
 
 COMPANY = None
 ABBR = None
 ORIGINAL_FROZEN_UPTO = None
+# Set in run(). Never rebuild this name by hand — see ensure_account.
+WHT_ACCOUNT = None
 PREFIX = "VMCHK"
 
 RESULTS = []
@@ -61,9 +63,14 @@ def acc(number_and_name):
 
 
 def ensure_account(name, parent, account_type=None, root_type=None, currency=None):
-	full = f"{name} - {ABBR}"
-	if frappe.db.exists("Account", full):
-		return full
+	# Never assume the document name is "<account_name> - <abbr>". On a chart that uses
+	# account numbers ERPNext prefixes one automatically, so a freshly created
+	# "VMCHK WHT" comes back as "2301 - VMCHK WHT - K". Look it up by account_name and
+	# hand back whatever name the site actually gave it.
+	existing = frappe.db.get_value(
+		"Account", {"company": COMPANY, "account_name": name}, "name")
+	if existing:
+		return existing
 
 	doc = frappe.get_doc({
 		"doctype": "Account",
@@ -160,14 +167,23 @@ def make_sales_invoice(customer, rate, cost_center):
 	return doc
 
 
+BILL_SEQ = 0
+
+
 def make_purchase_invoice(supplier, rate, cost_center):
+	# A supplier invoice number has to be unique per supplier when
+	# `check_supplier_invoice_uniqueness` is on, and this run creates several for the same
+	# supplier. Number them rather than reusing one literal.
+	global BILL_SEQ
+	BILL_SEQ += 1
+
 	doc = frappe.get_doc({
 		"doctype": "Purchase Invoice",
 		"supplier": supplier,
 		"company": COMPANY,
 		"posting_date": nowdate(),
 		"due_date": add_days(nowdate(), 30),
-		"bill_no": f"{PREFIX}-BILL",
+		"bill_no": f"{PREFIX}-BILL-{BILL_SEQ:03d}",
 		"credit_to": acc("2110 - Creditors"),
 		"items": [{
 			"item_code": ensure_item(),
@@ -321,7 +337,7 @@ def check_negative_tax(templates, cc):
 	debit, credit = totals(entries)
 	check_eq("GL balanced", debit, credit)
 
-	wht = [e for e in entries if e.account == acc(f"{PREFIX} WHT")]
+	wht = [e for e in entries if e.account == WHT_ACCOUNT]
 	check("withholding line was posted", len(wht) == 1)
 	if wht:
 		check_eq("withholding is a credit of 50", wht[0].credit, 50)
@@ -351,7 +367,7 @@ def check_multi_tax_accounts(templates, cc):
 	check_eq("GL balanced", debit, credit)
 
 	vat = [e for e in entries if e.account == acc("VAT")]
-	wht = [e for e in entries if e.account == acc(f"{PREFIX} WHT")]
+	wht = [e for e in entries if e.account == WHT_ACCOUNT]
 	check("VAT line posted separately", len(vat) == 1)
 	check("WHT line posted separately", len(wht) == 1)
 	if vat:
@@ -1286,6 +1302,188 @@ def check_rounding(templates, cc):
 			 debit, flt(sum(awkward), 2))
 
 
+def check_ledger_follows_the_edit(cc, cc2):
+	print("\n[24] Update on an approved voucher reaches tabGL Entry")
+
+	project = frappe.db.get_value("Project", {"project_name": f"{PREFIX} Project A"}, "name") \
+		or frappe.get_doc({"doctype": "Project", "project_name": f"{PREFIX} Project A",
+						   "company": COMPANY}).insert(ignore_permissions=True).name
+
+	def gl_field(voucher, detail_no, fieldname):
+		"""Read the ledger the way a report would — straight from GL Entry."""
+		return frappe.db.get_value(
+			"GL Entry",
+			{"voucher_type": "Vouchers Entry", "voucher_no": voucher,
+			 "is_cancelled": 0, "voucher_detail_no": detail_no or ("", "is", "not set")},
+			fieldname)
+
+	def build_and_edit(label, strip_detail_no):
+		doc = make_voucher(
+			"Receive",
+			rows=[{"account": acc("1310 - Debtors"), "party_type": "Customer", "party": "خالد",
+				   "amount": 400, "cost_center": cc}],
+			account_payment=acc("1110 - Cash"), cost_center=cc, remarks="ORIGINAL HEADER",
+			submit=True,
+		)
+		row_name = doc.references[0].name
+
+		if strip_detail_no:
+			# Exactly what a voucher submitted before the stamp existed looks like.
+			frappe.db.sql(
+				"""UPDATE `tabGL Entry` SET voucher_detail_no=NULL
+				   WHERE voucher_type='Vouchers Entry' AND voucher_no=%s""", doc.name)
+
+		doc.reload()
+		doc.remarks = "EDITED HEADER"
+		doc.cost_center = cc2
+		doc.project = project
+		doc.references[0].cost_center = cc2
+		doc.references[0].project = project
+		doc.references[0].user_remark = "EDITED ROW"
+		doc.save()
+
+		print(f"    -- {label}")
+		for r in frappe.db.sql(
+			"""SELECT account, party, remarks, cost_center, project, voucher_detail_no
+			   FROM `tabGL Entry`
+			   WHERE voucher_type='Vouchers Entry' AND voucher_no=%s AND is_cancelled=0
+			   ORDER BY creation""", doc.name, as_dict=True):
+			print(f"       {r.account:<26} party={r.party or '-':<8} cc={r.cost_center}"
+				  f" proj={r.project} remarks={r.remarks!r}")
+
+		return doc, row_name
+
+	# --- a voucher posted by the current code -------------------------------------
+	doc, row_name = build_and_edit("stamped voucher", strip_detail_no=False)
+
+	check_eq("row line: cost centre reached the ledger",
+			 gl_field(doc.name, row_name, "cost_center"), cc2)
+	check_eq("row line: project reached the ledger",
+			 gl_field(doc.name, row_name, "project"), project)
+	check_eq("row line: its own remark reached the ledger",
+			 gl_field(doc.name, row_name, "remarks"), "EDITED ROW")
+
+	header = frappe.db.get_value(
+		"GL Entry",
+		{"voucher_type": "Vouchers Entry", "voucher_no": doc.name, "is_cancelled": 0,
+		 "account": acc("1110 - Cash")},
+		["remarks", "cost_center", "project"], as_dict=True)
+	check_eq("header line: remark reached the ledger", header.remarks, "EDITED HEADER")
+	check_eq("header line: cost centre reached the ledger", header.cost_center, cc2)
+	check_eq("header line: project reached the ledger", header.project, project)
+
+	# --- a voucher posted before voucher_detail_no was stamped ---------------------
+	# The reported symptom. Every GL row looked like a header row, so a row-level edit
+	# went nowhere and the header's value was written over the party line instead.
+	legacy, legacy_row = build_and_edit("legacy voucher (no voucher_detail_no)",
+										strip_detail_no=True)
+
+	party_line = frappe.db.get_value(
+		"GL Entry",
+		{"voucher_type": "Vouchers Entry", "voucher_no": legacy.name, "is_cancelled": 0,
+		 "party": "خالد"},
+		["remarks", "cost_center", "project", "voucher_detail_no"], as_dict=True)
+
+	check_eq("legacy row line: its own remark reached the ledger",
+			 party_line.remarks, "EDITED ROW")
+	check_eq("legacy row line: cost centre reached the ledger",
+			 party_line.cost_center, cc2)
+	check_eq("legacy row line: project reached the ledger",
+			 party_line.project, project)
+	check_eq("legacy row line was stamped so the next edit is exact",
+			 party_line.voucher_detail_no, legacy_row)
+
+	legacy_header = frappe.db.get_value(
+		"GL Entry",
+		{"voucher_type": "Vouchers Entry", "voucher_no": legacy.name, "is_cancelled": 0,
+		 "account": acc("1110 - Cash")},
+		["remarks", "voucher_detail_no"], as_dict=True)
+	check_eq("legacy header line kept the document remark",
+			 legacy_header.remarks, "EDITED HEADER")
+	check("legacy header line was not mistaken for a row",
+		  not legacy_header.voucher_detail_no, str(legacy_header.voucher_detail_no))
+
+	# Amounts are not allow_on_submit and must never come through this path.
+	def tamper():
+		legacy.reload()
+		legacy.references[0].amount = 999
+		legacy.save()
+
+	expect_throw("an amount cannot be changed after submit", tamper)
+
+
+def check_precision_is_pinned():
+	print("\n[23] Money is pinned to two decimals inside the app only")
+
+	from frappe.model.meta import get_field_precision
+
+	from voucher_management.voucher_management.doctype.vouchers_entry.vouchers_entry import (
+		CURRENCY_PRECISION,
+		EXCHANGE_RATE_PRECISION,
+	)
+
+	money = {
+		"Vouchers Entry": ["paid_amount", "total_allocated_amount", "total_taxes",
+						   "amount_after_tax", "payment_amount", "received_amount",
+						   "exchange_difference"],
+		"Voucher Entry Account": ["amount", "amount_before_tax", "tax_amount",
+								  "amount_after_tax", "base_amount", "base_amount_before_tax",
+								  "base_tax_amount", "base_amount_after_tax"],
+		"Vouchers Ref Child": ["total_amount", "outstanding_amount", "allocated_amount",
+							   "exchange_gain_loss"],
+		"Vouchers Ref Child 2": ["total_amount", "outstanding_amount", "allocated_amount",
+								 "exchange_gain_loss"],
+	}
+
+	rates = {
+		"Vouchers Entry": ["payment_exchange_rate", "source_exchange_rate", "target_exchange_rate"],
+		"Voucher Entry Account": ["exchange_rate"],
+		"Vouchers Ref Child": ["exchange_rate"],
+		"Vouchers Ref Child 2": ["exchange_rate"],
+	}
+
+	drift = []
+	for doctype, fieldnames in money.items():
+		meta = frappe.get_meta(doctype)
+		for fieldname in fieldnames:
+			df = meta.get_field(fieldname)
+			# The JSON must carry the pin, not inherit it — a site whose System Settings
+			# say 3 has to still give this app 2.
+			if cint(df.precision) != CURRENCY_PRECISION or get_field_precision(df) != CURRENCY_PRECISION:
+				drift.append(f"{doctype}.{fieldname} json={df.precision!r} resolved={get_field_precision(df)}")
+
+	check("every money field is pinned to 2 in the DocType JSON", not drift, str(drift[:4]))
+
+	rate_drift = []
+	for doctype, fieldnames in rates.items():
+		meta = frappe.get_meta(doctype)
+		for fieldname in fieldnames:
+			df = meta.get_field(fieldname)
+			if cint(df.precision) != EXCHANGE_RATE_PRECISION:
+				rate_drift.append(f"{doctype}.{fieldname}={df.precision!r}")
+
+	check("exchange rates keep their 9 digits", not rate_drift, str(rate_drift))
+
+	# The whole point of pinning per field is to leave the rest of ERPNext alone. What
+	# makes that true is not the number a foreign field happens to resolve to — a blank
+	# `currency_precision` already makes most Currency fields land on 2 by themselves —
+	# but that nothing outside this app carries a pin we put there.
+	system_float = frappe.db.get_single_value("System Settings", "float_precision")
+	check("System Settings.float_precision was not narrowed to 2",
+		  cint(system_float) != CURRENCY_PRECISION, f"float_precision={system_float!r}")
+
+	outside = []
+	for doctype, fieldname in (("Journal Entry", "total_debit"),
+							   ("Payment Entry", "paid_amount"),
+							   ("Sales Invoice", "grand_total"),
+							   ("GL Entry", "debit")):
+		df = frappe.get_meta(doctype).get_field(fieldname)
+		if df and df.precision:
+			outside.append(f"{doctype}.{fieldname}={df.precision!r}")
+
+	check("no field outside this app was pinned", not outside, str(outside))
+
+
 def check_grid_budget():
 	print("\n[21] The child grid fits inside Frappe's column ceiling")
 
@@ -1375,7 +1573,9 @@ def run(keep=False):
 		duties = frappe.db.get_value("Account", {"company": COMPANY, "account_name": "Duties and Taxes"}, "name") \
 			or frappe.db.get_value("Account", {"company": COMPANY, "root_type": "Liability", "is_group": 1}, "name")
 
-		wht_account = ensure_account(f"{PREFIX} WHT", duties, account_type="Tax", root_type="Liability")
+		global WHT_ACCOUNT
+		wht_account = WHT_ACCOUNT = ensure_account(
+			f"{PREFIX} WHT", duties, account_type="Tax", root_type="Liability")
 		vat_account = acc("VAT")
 		cc = frappe.db.get_value("Cost Center", {"company": COMPANY, "is_group": 0}, "name")
 		cc2 = ensure_cost_center(f"{PREFIX} CC")
@@ -1422,6 +1622,8 @@ def run(keep=False):
 		check_exchange_difference_figure(cc)
 		check_header_dimensions_and_defaults(cc, cc2)
 		check_rounding(templates, cc)
+		check_ledger_follows_the_edit(cc, cc2)
+		check_precision_is_pinned()
 		check_grid_budget()
 
 	finally:

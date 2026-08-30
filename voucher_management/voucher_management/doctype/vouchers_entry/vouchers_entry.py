@@ -6,7 +6,6 @@ import json
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.model.meta import get_field_precision
 from frappe.utils import cint, flt, getdate
 
 # Charge types that make sense on a voucher. "On Item Quantity" needs item rows,
@@ -19,6 +18,22 @@ SUPPORTED_CHARGE_TYPES = (
 )
 
 PARTY_ACCOUNT_TYPES = ("Receivable", "Payable")
+
+# Money in this app is carried to two decimals. The pin lives on the DocType fields
+# themselves (`"precision": "2"`), not in System Settings, so every other screen in
+# ERPNext keeps whatever precision the site is configured for — `float_precision` stays
+# 3 and only vouchers are narrowed.
+#
+# This constant is the Python half of that pin. Reading it, instead of asking the meta
+# for each field's precision at every call site, is what keeps a row and the total it
+# feeds from being rounded to two different widths — which is how a voucher ends up one
+# hallala above the amount that was typed. `check_precision_is_pinned` in full_check.py
+# fails if the JSON and this constant ever drift apart.
+CURRENCY_PRECISION = 2
+
+# Exchange rates are not money. A pegged rate needs its digits (3.6725), so the rate
+# fields keep precision 9 and are never rounded to CURRENCY_PRECISION.
+EXCHANGE_RATE_PRECISION = 9
 
 # How far the two converted sides of a voucher may drift before the gap stops being a
 # rate movement and starts being a typo.
@@ -243,23 +258,34 @@ class VouchersEntry(Document):
 
 		`read_only` is a UI-level flag in Frappe: the fields stay writable over the API, so
 		nothing in the submitted payload is trusted and everything is recomputed here.
+
+		Rounding happens once per row, to CURRENCY_PRECISION, before anything is added up.
+		The totals are then sums of those already-rounded figures — never a sum of raw
+		products rounded at the end. Those two orders disagree: three rows of 0.075 sum to
+		0.225 and round to 0.23, while rounding each to 0.08 first gives 0.24. The second
+		is the one that matches what the rows show on screen and what the ledger posts, so
+		it is the one used.
 		"""
-		precision = self.precision("total_taxes")
+		precision = CURRENCY_PRECISION
 
 		base_before_tax = 0.0
 		base_taxes = 0.0
 
 		for row in self.references:
 			amount = flt(row.amount, precision)
-			rate = flt(row.exchange_rate) or 1.0
+			rate = flt(row.exchange_rate, EXCHANGE_RATE_PRECISION) or 1.0
 			breakup = get_tax_breakup(row.taxes, amount, precision)
 
 			row.amount = amount
 			row.exchange_rate = rate
+
+			# Row figures in the account's own currency, each settled at two decimals.
 			row.amount_before_tax = flt(breakup["net_amount"], precision)
 			row.tax_amount = flt(breakup["total"], precision)
-			row.amount_after_tax = flt(breakup["grand_total"], precision)
+			row.amount_after_tax = flt(row.amount_before_tax + row.tax_amount, precision)
 
+			# The same figures converted to company currency. Convert the settled row
+			# values, not the raw ones, so the two currencies tell the same story.
 			row.base_amount = flt(row.amount * rate, precision)
 			row.base_amount_before_tax = flt(row.amount_before_tax * rate, precision)
 			row.base_tax_amount = flt(row.tax_amount * rate, precision)
@@ -271,6 +297,8 @@ class VouchersEntry(Document):
 			base_before_tax += row.base_amount_before_tax
 			base_taxes += row.base_tax_amount
 
+		# Both accumulators only ever received values that were already rounded, so these
+		# calls are settling float representation error (0.1 + 0.2), not rounding money.
 		self.total_allocated_amount = flt(base_before_tax, precision)
 		self.total_taxes = flt(base_taxes, precision)
 		self.amount_after_tax = flt(self.total_allocated_amount + self.total_taxes, precision)
@@ -291,7 +319,7 @@ class VouchersEntry(Document):
 			self.set_transfer_amounts()
 			return
 
-		precision = self.precision("amount_after_tax")
+		precision = CURRENCY_PRECISION
 
 		if not self.has_foreign_leg():
 			self.payment_exchange_rate = 1
@@ -312,7 +340,7 @@ class VouchersEntry(Document):
 
 	def set_transfer_amounts(self):
 		"""A transfer between two currencies is a purchase of one with the other."""
-		precision = self.precision("amount_after_tax")
+		precision = CURRENCY_PRECISION
 
 		if not flt(self.received_amount):
 			self.received_amount = flt(self.paid_amount)
@@ -484,7 +512,7 @@ class VouchersEntry(Document):
 
 		self.validate_allocation_currency()
 
-		precision = self.precision("total_allocated_amount")
+		precision = CURRENCY_PRECISION
 
 		available = {}
 		for row in self.references:
@@ -591,7 +619,7 @@ class VouchersEntry(Document):
 		if not allocations:
 			return
 
-		precision = self.precision("total_allocated_amount")
+		precision = CURRENCY_PRECISION
 		rates = {row.name: flt(row.exchange_rate) or 1.0 for row in self.references}
 
 		for row_name, pairs in distribute_allocations(self).items():
@@ -623,7 +651,7 @@ class VouchersEntry(Document):
 		if self.payment_type == "Internal Transfer":
 			return []
 
-		precision = self.precision("total_taxes")
+		precision = CURRENCY_PRECISION
 		totals = {}
 		order = []
 
@@ -735,9 +763,9 @@ def get_tax_breakup(template, amount, precision=None):
 	frappe.has_permission("Purchase Taxes and Charges Template", throw=True)
 
 	amount = flt(amount)
-	precision = cint(precision) or get_field_precision(
-		frappe.get_meta("Voucher Entry Account").get_field("tax_amount")
-	)
+	# The client passes the precision explicitly; the fallback keeps a direct call — from
+	# a script or the console — on the same two decimals as everything else.
+	precision = cint(precision) or CURRENCY_PRECISION
 
 	untaxed = {
 		"net_amount": flt(amount, precision),

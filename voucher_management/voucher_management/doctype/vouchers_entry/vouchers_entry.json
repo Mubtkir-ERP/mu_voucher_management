@@ -172,7 +172,8 @@
    "fieldtype": "Currency",
    "label": "Amount",
    "mandatory_depends_on": "eval:doc.payment_type == \"Internal Transfer\"",
-   "options": "paid_from_currency"
+   "options": "paid_from_currency",
+   "precision": "2"
   },
   {
    "fieldname": "column_break_21",
@@ -203,7 +204,8 @@
    "label": "Total (Company Currency)",
    "print_hide": 1,
    "read_only": 1,
-   "options": "Company:company:default_currency"
+   "options": "Company:company:default_currency",
+   "precision": "2"
   },
   {
    "fieldname": "column_break_36",
@@ -320,7 +322,8 @@
    "label": "Total Taxes",
    "options": "Company:company:default_currency",
    "print_hide": 1,
-   "read_only": 1
+   "read_only": 1,
+   "precision": "2"
   },
   {
    "fetch_from": "paid_from.account_type",
@@ -345,7 +348,8 @@
    "label": "Grand Total (Company Currency)",
    "options": "Company:company:default_currency",
    "print_hide": 1,
-   "read_only": 1
+   "read_only": 1,
+   "precision": "2"
   },
   {
    "fieldname": "column_break_ngsl",
@@ -370,7 +374,6 @@
    "fieldtype": "Column Break"
   },
   {
-   "fetch_from": "company.default_currency",
    "fetch_from": "company.default_currency",
    "fetch_if_empty": 1,
    "fieldname": "currency",
@@ -436,7 +439,8 @@
    "options": "account_payment_currency",
    "depends_on": "eval:in_list([\"Receive\", \"Pay\"], doc.payment_type) && doc.account_payment_currency && doc.account_payment_currency != doc.currency",
    "bold": 1,
-   "description": "Amount that actually moved, in the account's own currency."
+   "description": "Amount that actually moved, in the account's own currency.",
+   "precision": "2"
   },
   {
    "fetch_from": "paid_from.account_currency",
@@ -480,7 +484,8 @@
    "label": "Received Amount",
    "options": "paid_to_currency",
    "depends_on": "eval:doc.payment_type == \"Internal Transfer\"",
-   "description": "What lands in the destination account, in that account's currency."
+   "description": "What lands in the destination account, in that account's currency.",
+   "precision": "2"
   },
   {
    "fieldname": "exchange_difference",
@@ -490,7 +495,8 @@
    "options": "Company:company:default_currency",
    "print_hide": 1,
    "no_copy": 1,
-   "depends_on": "eval:doc.exchange_difference"
+   "depends_on": "eval:doc.exchange_difference",
+   "precision": "2"
   }
  ],
  "grid_page_length": 50,

@@ -11,6 +11,10 @@ from erpnext.accounts.general_ledger import (
     validate_accounting_period,
 )
 
+from voucher_management.voucher_management.doctype.vouchers_entry.vouchers_entry import (
+    CURRENCY_PRECISION,
+)
+
 # Ledger rows survive cancellation with is_cancelled = 1 instead of being deleted, so
 # Frappe's generic "document is linked" guard has to be told to look past them.
 LEDGER_DOCTYPES = ("GL Entry", "Payment Ledger Entry")
@@ -94,7 +98,7 @@ def on_update_after_submit(doc, method=None):
     gl_rows = frappe.get_all(
         "GL Entry",
         filters={"voucher_type": doc.doctype, "voucher_no": doc.name, "is_cancelled": 0},
-        fields=["name", "voucher_detail_no", "account"],
+        fields=["name", "voucher_detail_no", "account", "party"],
     )
 
     if not gl_rows:
@@ -106,9 +110,30 @@ def on_update_after_submit(doc, method=None):
         [frappe._dict({"posting_date": doc.posting_date, "company": doc.company, "voucher_type": doc.doctype})]
     )
 
+    header_accounts = _header_accounts(doc)
+    row_by_key = _rows_by_account_and_party(doc)
+
     updated = 0
+    unmatched = 0
+
     for gl in gl_rows:
-        values = changes.get(gl.voucher_detail_no or "__header__")
+        owner = _owner_of(gl, header_accounts, row_by_key)
+
+        if owner is None:
+            # A ledger row we cannot attribute. Leaving it alone is the only safe move:
+            # stamping the header's values on what may be a row line would put one row's
+            # cost centre on another's.
+            unmatched += 1
+            continue
+
+        if owner != "__header__" and not gl.voucher_detail_no:
+            # Identified a legacy row line. Stamp it so the next edit is an exact match
+            # instead of another guess.
+            frappe.db.set_value("GL Entry", gl.name, "voucher_detail_no", owner,
+                                update_modified=False)
+            gl.voucher_detail_no = owner
+
+        values = changes.get(owner)
         if not values:
             continue
 
@@ -124,8 +149,68 @@ def on_update_after_submit(doc, method=None):
         )
         updated += 1
 
+    # Reports read the voucher through the document cache; drop it so the new values are
+    # what the next reader sees.
+    frappe.clear_document_cache(doc.doctype, doc.name)
+
     if updated:
         frappe.msgprint(_("{0} General Ledger row(s) updated in place.").format(updated), alert=True)
+
+    if unmatched:
+        frappe.msgprint(
+            _(
+                "{0} General Ledger row(s) could not be matched to a line of this voucher "
+                "and were left unchanged. Cancel and amend the voucher to rebuild them."
+            ).format(unmatched),
+            indicator="orange",
+            title=_("Partially updated"),
+        )
+
+
+def _header_accounts(doc):
+    """Accounts whose GL rows belong to the document itself, not to a reference row.
+
+    Needed because a GL row with no `voucher_detail_no` is ambiguous: it is either a
+    header line — which never carries one — or a row line posted before the stamp existed.
+    Knowing which accounts the header posts to tells the two apart.
+    """
+    accounts = {doc.account_payment, doc.paid_from, doc.paid_to}
+    accounts |= {tax["account_head"] for tax in doc.get_tax_lines()}
+    accounts.add(frappe.get_cached_value("Company", doc.company, "exchange_gain_loss_account"))
+
+    return {account for account in accounts if account}
+
+
+def _rows_by_account_and_party(doc):
+    """Map (account, party) -> row name, for keys that belong to exactly one row.
+
+    A key shared by two rows tells us nothing about which of them a ledger row came from,
+    so it is dropped rather than guessed at.
+    """
+    owners = {}
+
+    for row in doc.references:
+        key = (row.account, row.party or "")
+        owners.setdefault(key, []).append(row.name)
+
+    return {key: names[0] for key, names in owners.items() if len(names) == 1}
+
+
+def _owner_of(gl, header_accounts, row_by_key):
+    """Which part of the voucher a ledger row came from.
+
+    Returns the reference row's name, "__header__", or None when it cannot be told.
+    """
+    if gl.voucher_detail_no:
+        return gl.voucher_detail_no
+
+    # Header lines legitimately carry no stamp.
+    if not gl.party and gl.account in header_accounts:
+        return "__header__"
+
+    # Otherwise it is a row line from before the stamp existed — match it back by the
+    # only identity it still has.
+    return row_by_key.get((gl.account, gl.party or ""))
 
 
 # ---------------------------------------------------------------------------
@@ -305,7 +390,7 @@ def distribute_allocations(doc):
     if not allocations:
         return assignments
 
-    precision = doc.precision("total_allocated_amount")
+    precision = CURRENCY_PRECISION
     capacity = {row.name: flt(row.amount_before_tax, precision) for row in doc.references}
 
     for alloc in allocations:
@@ -347,6 +432,10 @@ def _validate_balance(doc, gl_entries):
     how much. Any genuine currency gap has already been booked to the exchange account by
     the time this runs, so what is left here is an error, not a rate.
     """
+    # GL Entry's own precision, not the voucher's. This measures the ledger rows we are
+    # about to hand over, and they are stored at whatever width GL Entry uses. Our figures
+    # arrive already settled at CURRENCY_PRECISION, so a wider ledger precision only makes
+    # this check stricter — never looser.
     precision = get_field_precision(
         frappe.get_meta("GL Entry").get_field("debit"),
         currency=frappe.get_cached_value("Company", doc.company, "default_currency"),
@@ -413,7 +502,7 @@ def _build_party_lines(doc, gl_entries, header_dimensions, direction):
     """
     header_remarks = doc.remarks or ""
     assignments = distribute_allocations(doc)
-    precision = doc.precision("total_allocated_amount")
+    precision = CURRENCY_PRECISION
 
     for row in doc.references:
         row_remarks = row.user_remark or header_remarks
@@ -476,7 +565,7 @@ def _build_tax_lines(doc, gl_entries, header_dimensions, direction):
 
 def _build_payment_line(doc, gl_entries, header_dimensions, direction):
     """The bank/cash side, carrying the gross amount in its own currency."""
-    precision = doc.precision("amount_after_tax")
+    precision = CURRENCY_PRECISION
     amount = flt(doc.payment_amount)
     base_amount = flt(amount * (flt(doc.payment_exchange_rate) or 1.0), precision)
 
@@ -496,6 +585,10 @@ def _build_exchange_difference_line(doc, gl_entries, header_dimensions):
     rather than the voucher rate. Whatever the two sides disagree by after every other line
     is written is, by definition, the realised gain or loss.
     """
+    # GL Entry's own precision, not the voucher's. This measures the ledger rows we are
+    # about to hand over, and they are stored at whatever width GL Entry uses. Our figures
+    # arrive already settled at CURRENCY_PRECISION, so a wider ledger precision only makes
+    # this check stricter — never looser.
     precision = get_field_precision(
         frappe.get_meta("GL Entry").get_field("debit"),
         currency=frappe.get_cached_value("Company", doc.company, "default_currency"),
@@ -546,7 +639,7 @@ def _build_transfer_entries(doc, gl_entries, header_dimensions):
     gap, which is the cost of the conversion itself.
     """
     remarks = doc.remarks or ""
-    precision = doc.precision("amount_after_tax")
+    precision = CURRENCY_PRECISION
 
     paid = flt(doc.paid_amount)
     received = flt(doc.received_amount) or paid
