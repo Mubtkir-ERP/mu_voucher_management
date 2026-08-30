@@ -11,6 +11,9 @@
   "column_break_5",
   "posting_date",
   "account_payment",
+  "account_payment_currency",
+  "payment_exchange_rate",
+  "payment_amount",
   "column_break_ngsl",
   "time",
   "reference_no",
@@ -24,15 +27,23 @@
   "currency",
   "accounting_dimensions_section",
   "cost_center",
+  "project",
   "dimension_col_break",
+  "default_customer",
+  "default_supplier",
   "payment_accounts_section",
   "paid_from",
   "paid_from_account_type",
+  "paid_from_currency",
+  "source_exchange_rate",
   "column_break_18",
   "paid_to",
   "paid_to_account_type",
+  "paid_to_currency",
+  "target_exchange_rate",
   "payment_amounts_section",
   "paid_amount",
+  "received_amount",
   "column_break_21",
   "section_break_14",
   "references",
@@ -46,8 +57,8 @@
   "total_taxes",
   "column_break_36",
   "amount_after_tax",
+  "exchange_difference",
   "section_break_12",
-  "journal_entry",
   "column_break_16",
   "subscription_section",
   "title",
@@ -100,14 +111,15 @@
    "label": "Company",
    "options": "Company",
    "print_hide": 1,
-   "remember_last_selected_value": 1
+   "remember_last_selected_value": 1,
+   "reqd": 1
   },
   {
    "fieldname": "mode_of_payment",
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Mode of Payment",
-  
+   "mandatory_depends_on": "eval:in_list([\"Receive\", \"Pay\"], doc.payment_type)",
    "options": "Mode of Payment"
   },
   {
@@ -117,14 +129,12 @@
   },
   {
    "bold": 1,
-   "depends_on": "eval:(in_list([\"Internal Transfer\"], doc.payment_type) || doc.party)",
-   "fetch_from": "mode_of_payment.custom_default_account",
-   "fetch_if_empty": 1,
+   "depends_on": "eval:doc.payment_type == \"Internal Transfer\"",
    "fieldname": "paid_from",
    "fieldtype": "Link",
    "in_global_search": 1,
    "label": "Account Paid From",
-   "mandatory_depends_on": "eval:(in_list([\"Internal Transfer\"], doc.payment_type) || doc.party)",
+   "mandatory_depends_on": "eval:doc.payment_type == \"Internal Transfer\"",
    "options": "Account",
    "print_hide": 1
   },
@@ -133,12 +143,12 @@
    "fieldtype": "Column Break"
   },
   {
-   "depends_on": "eval:(in_list([\"Internal Transfer\"], doc.payment_type) || doc.party)",
+   "depends_on": "eval:doc.payment_type == \"Internal Transfer\"",
    "fieldname": "paid_to",
    "fieldtype": "Link",
    "in_global_search": 1,
    "label": "Account Paid To",
-   "mandatory_depends_on": "eval:(in_list([\"Internal Transfer\"], doc.payment_type) || doc.party)",
+   "mandatory_depends_on": "eval:doc.payment_type == \"Internal Transfer\"",
    "options": "Account",
    "print_hide": 1
   },
@@ -157,19 +167,20 @@
   },
   {
    "bold": 1,
-   "depends_on": "eval:(in_list([\"Internal Transfer\"], doc.payment_type) || doc.party)",
+   "depends_on": "eval:doc.payment_type == \"Internal Transfer\"",
    "fieldname": "paid_amount",
    "fieldtype": "Currency",
    "label": "Amount",
-   "mandatory_depends_on": "eval:(in_list([\"Internal Transfer\"], doc.payment_type) || doc.party)",
-   "options": "paid_from_account_currency"
+   "mandatory_depends_on": "eval:doc.payment_type == \"Internal Transfer\"",
+   "options": "paid_from_currency",
+   "precision": "2"
   },
   {
    "fieldname": "column_break_21",
    "fieldtype": "Column Break"
   },
   {
-   "depends_on": "eval:(in_list([\"Receive\", \"Pay\"], doc.payment_type) || doc.party)",
+   "depends_on": "eval:in_list([\"Receive\", \"Pay\"], doc.payment_type)",
    "fieldname": "section_break_14",
    "fieldtype": "Section Break",
    "label": "Vouchers Accounts"
@@ -190,9 +201,11 @@
    "default": "0",
    "fieldname": "total_allocated_amount",
    "fieldtype": "Currency",
-   "label": "Total ",
+   "label": "Total (Company Currency)",
    "print_hide": 1,
-   "read_only": 1
+   "read_only": 1,
+   "options": "Company:company:default_currency",
+   "precision": "2"
   },
   {
    "fieldname": "column_break_36",
@@ -212,8 +225,36 @@
    "label": "Accounting Dimensions"
   },
   {
+   "allow_on_submit": 1,
+   "description": "Stamped on every line of this voucher.",
+   "fieldname": "project",
+   "fieldtype": "Link",
+   "label": "Project",
+   "options": "Project"
+  },
+  {
    "fieldname": "dimension_col_break",
    "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.payment_type == \"Receive\"",
+   "description": "Copied into new rows. Not an accounting dimension.",
+   "fieldname": "default_customer",
+   "fieldtype": "Link",
+   "label": "Default Customer",
+   "no_copy": 1,
+   "options": "Customer",
+   "print_hide": 1
+  },
+  {
+   "depends_on": "eval:doc.payment_type == \"Pay\"",
+   "description": "Copied into new rows. Not an accounting dimension.",
+   "fieldname": "default_supplier",
+   "fieldtype": "Link",
+   "label": "Default Supplier",
+   "no_copy": 1,
+   "options": "Supplier",
+   "print_hide": 1
   },
   {
    "allow_on_submit": 1,
@@ -245,7 +286,6 @@
    "fieldtype": "Section Break",
    "hidden": 1
   },
-  
   {
    "fieldname": "title",
    "fieldtype": "Data",
@@ -282,7 +322,8 @@
    "label": "Total Taxes",
    "options": "Company:company:default_currency",
    "print_hide": 1,
-   "read_only": 1
+   "read_only": 1,
+   "precision": "2"
   },
   {
    "fetch_from": "paid_from.account_type",
@@ -292,12 +333,11 @@
    "label": "Paid From Account Type"
   },
   {
-   "fetch_from": "mode_of_payment.custom_default_account",
-   "fetch_if_empty": 1,
+   "depends_on": "eval:in_list([\"Receive\", \"Pay\"], doc.payment_type)",
    "fieldname": "account_payment",
    "fieldtype": "Link",
    "label": "Account",
-   
+   "mandatory_depends_on": "eval:in_list([\"Receive\", \"Pay\"], doc.payment_type)",
    "options": "Account"
   },
   {
@@ -305,21 +345,11 @@
    "fieldname": "amount_after_tax",
    "fieldtype": "Currency",
    "in_list_view": 1,
-   "label": "Grand Total",
+   "label": "Grand Total (Company Currency)",
    "options": "Company:company:default_currency",
    "print_hide": 1,
-   "read_only": 1
-  },
-  {
-  
-   "bold": 1,
-   "fieldname": "journal_entry",
-   "fieldtype": "Link",
-   "in_global_search": 1,
-   "label": "Journal Entry",
-   "no_copy": 1,
-   "options": "Journal Entry",
-   "read_only": 1
+   "read_only": 1,
+   "precision": "2"
   },
   {
    "fieldname": "column_break_ngsl",
@@ -345,11 +375,13 @@
   },
   {
    "fetch_from": "company.default_currency",
+   "fetch_if_empty": 1,
    "fieldname": "currency",
    "fieldtype": "Link",
    "label": "Currency",
    "options": "Currency",
    "print_hide": 1,
+   "read_only": 1,
    "remember_last_selected_value": 1
   },
   {
@@ -381,6 +413,90 @@
    "fieldtype": "Table",
    "label": "Vouchers Payment References",
    "options": "Vouchers Ref Child 2"
+  },
+  {
+   "fetch_from": "account_payment.account_currency",
+   "fieldname": "account_payment_currency",
+   "fieldtype": "Link",
+   "label": "Payment Account Currency",
+   "options": "Currency",
+   "read_only": 1,
+   "print_hide": 1,
+   "depends_on": "eval:in_list([\"Receive\", \"Pay\"], doc.payment_type) && doc.account_payment_currency && doc.account_payment_currency != doc.currency"
+  },
+  {
+   "fieldname": "payment_exchange_rate",
+   "fieldtype": "Float",
+   "label": "Payment Exchange Rate",
+   "precision": "9",
+   "depends_on": "eval:in_list([\"Receive\", \"Pay\"], doc.payment_type) && doc.account_payment_currency && doc.account_payment_currency != doc.currency",
+   "description": "Auto-filled — edit if needed."
+  },
+  {
+   "fieldname": "payment_amount",
+   "fieldtype": "Currency",
+   "label": "Amount Paid / Received",
+   "options": "account_payment_currency",
+   "depends_on": "eval:in_list([\"Receive\", \"Pay\"], doc.payment_type) && doc.account_payment_currency && doc.account_payment_currency != doc.currency",
+   "bold": 1,
+   "description": "Amount that actually moved, in the account's own currency.",
+   "precision": "2"
+  },
+  {
+   "fetch_from": "paid_from.account_currency",
+   "fieldname": "paid_from_currency",
+   "fieldtype": "Link",
+   "label": "Paid From Currency",
+   "options": "Currency",
+   "read_only": 1,
+   "print_hide": 1,
+   "depends_on": "eval:doc.payment_type == \"Internal Transfer\""
+  },
+  {
+   "fieldname": "source_exchange_rate",
+   "fieldtype": "Float",
+   "label": "Source Exchange Rate",
+   "precision": "9",
+   "depends_on": "eval:doc.payment_type == \"Internal Transfer\"",
+   "description": "Leave blank for a foreign account: it is filled from the matching Currency Exchange record, and refused at save if none exists. A default of 1 would let a foreign amount post as if it were company currency."
+  },
+  {
+   "fetch_from": "paid_to.account_currency",
+   "fieldname": "paid_to_currency",
+   "fieldtype": "Link",
+   "label": "Paid To Currency",
+   "options": "Currency",
+   "read_only": 1,
+   "print_hide": 1,
+   "depends_on": "eval:doc.payment_type == \"Internal Transfer\""
+  },
+  {
+   "fieldname": "target_exchange_rate",
+   "fieldtype": "Float",
+   "label": "Target Exchange Rate",
+   "precision": "9",
+   "depends_on": "eval:doc.payment_type == \"Internal Transfer\"",
+   "description": "Leave blank for a foreign account: it is filled from the matching Currency Exchange record, and refused at save if none exists. A default of 1 would let a foreign amount post as if it were company currency."
+  },
+  {
+   "fieldname": "received_amount",
+   "fieldtype": "Currency",
+   "label": "Received Amount",
+   "options": "paid_to_currency",
+   "depends_on": "eval:doc.payment_type == \"Internal Transfer\"",
+   "description": "What lands in the destination account, in that account's currency.",
+   "precision": "2"
+  },
+  {
+   "fieldname": "exchange_difference",
+   "fieldtype": "Currency",
+   "read_only": 1,
+   "label": "Exchange Gain / Loss",
+   "options": "Company:company:default_currency",
+   "print_hide": 1,
+   "no_copy": 1,
+   "depends_on": "eval:doc.exchange_difference",
+   "precision": "2"
   }
  ],
  "grid_page_length": 50,

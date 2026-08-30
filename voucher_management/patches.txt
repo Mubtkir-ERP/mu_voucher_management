@@ -5,3 +5,5 @@
 [post_model_sync]
 # Patches added in this section will be executed after doctypes are migrated
 voucher_management.patches.enable_dimension_allow_on_submit
+voucher_management.patches.rename_suppiler_to_supplier
+voucher_management.patches.backfill_exchange_rates
