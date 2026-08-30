@@ -1302,6 +1302,7 @@ def check_rounding(templates, cc):
 			 debit, flt(sum(awkward), 2))
 
 
+<<<<<<< HEAD
 def check_ledger_follows_the_edit(cc, cc2):
 	print("\n[24] Update on an approved voucher reaches tabGL Entry")
 
@@ -1412,6 +1413,8 @@ def check_ledger_follows_the_edit(cc, cc2):
 	expect_throw("an amount cannot be changed after submit", tamper)
 
 
+=======
+>>>>>>> 05a25dbc28f7f086740fecfd11024aaa1a5a632c
 def check_precision_is_pinned():
 	print("\n[23] Money is pinned to two decimals inside the app only")
 
@@ -1622,7 +1625,10 @@ def run(keep=False):
 		check_exchange_difference_figure(cc)
 		check_header_dimensions_and_defaults(cc, cc2)
 		check_rounding(templates, cc)
+<<<<<<< HEAD
 		check_ledger_follows_the_edit(cc, cc2)
+=======
+>>>>>>> 05a25dbc28f7f086740fecfd11024aaa1a5a632c
 		check_precision_is_pinned()
 		check_grid_budget()
 
