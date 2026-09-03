@@ -663,7 +663,12 @@ def check_account_guards(cc):
 			account_payment=acc("1110 - Cash"), cost_center=cc,
 		)
 
-	expect_throw("a zero amount row is refused", zero_amount, contains="greater than zero")
+	# A row carrying nothing but its seeding is dropped before validation, so a voucher
+	# made only of one is refused for having no rows at all. The "greater than zero"
+	# message is still the one a user sees when they typed something into the row and
+	# left the amount out — section 25 covers that.
+	expect_throw("a voucher whose only row is empty is refused", zero_amount,
+				 contains="At least one row")
 
 	# Foreign currencies are supported now. What is still refused is a foreign *tax*
 	# account: one tax head collects the tax of rows that may be in different currencies,
@@ -1412,6 +1417,95 @@ def check_ledger_follows_the_edit(cc, cc2):
 	expect_throw("an amount cannot be changed after submit", tamper)
 
 
+def check_abandoned_rows(templates, cc):
+	print("\n[25] A row that was started and never filled in")
+
+	# What the grid produces when someone clicks Add Row and walks away: the party type is
+	# seeded, nothing else. It must not block the save.
+	doc = make_voucher(
+		"Receive",
+		rows=[
+			{"account": acc("1310 - Debtors"), "party_type": "Customer", "party": "خالد",
+			 "amount": 600, "cost_center": cc},
+			{"party_type": "Customer"},
+		],
+		account_payment=acc("1110 - Cash"), cost_center=cc, remarks="abandoned row",
+	)
+
+	check_eq("the empty row was dropped", len(doc.references), 1)
+	check_eq("the real row survived", doc.references[0].amount, 600)
+	check_eq("rows were renumbered", doc.references[0].idx, 1)
+	check_eq("the total ignores the dropped row", doc.amount_after_tax, 600)
+
+	# A row seeded with a party and its account, but no money, is the same case — the
+	# seeding is not the user's input.
+	doc = make_voucher(
+		"Receive",
+		rows=[
+			{"account": acc("1310 - Debtors"), "party_type": "Customer", "party": "خالد",
+			 "amount": 600, "cost_center": cc},
+			{"account": acc("1310 - Debtors"), "party_type": "Customer", "party": "علي",
+			 "cost_center": cc},
+		],
+		account_payment=acc("1110 - Cash"), cost_center=cc,
+	)
+	check_eq("a seeded-but-unfilled row was dropped too", len(doc.references), 1)
+
+	# But anything the user actually typed keeps the row alive, so a genuine mistake is
+	# still reported instead of silently deleted.
+	def half_entered():
+		make_voucher(
+			"Receive",
+			rows=[{"account": acc("1310 - Debtors"), "party_type": "Customer",
+				   "party": "خالد", "cost_center": cc,
+				   "user_remark": "I meant to type an amount here"}],
+			account_payment=acc("1110 - Cash"), cost_center=cc,
+		)
+
+	expect_throw("a row the user wrote in is refused, not deleted", half_entered,
+				 contains="greater than zero")
+
+	def taxed_but_zero():
+		make_voucher(
+			"Receive",
+			rows=[{"account": acc("1310 - Debtors"), "party_type": "Customer",
+				   "party": "خالد", "cost_center": cc, "taxes": templates["inclusive"]}],
+			account_payment=acc("1110 - Cash"), cost_center=cc,
+		)
+
+	expect_throw("a row with a tax template is refused, not deleted", taxed_but_zero,
+				 contains="greater than zero")
+
+	def all_empty():
+		make_voucher(
+			"Receive",
+			rows=[{"party_type": "Customer"}, {"party_type": "Customer"}],
+			account_payment=acc("1110 - Cash"), cost_center=cc,
+		)
+
+	expect_throw("a voucher of nothing but empty rows is refused", all_empty,
+				 contains="At least one row")
+
+	# The load-bearing guarantee: rows can never vanish from a posted voucher, because
+	# Frappe does not run validate (or before_validate) on update-after-submit.
+	posted = make_voucher(
+		"Receive",
+		rows=[{"account": acc("1310 - Debtors"), "party_type": "Customer", "party": "خالد",
+			   "amount": 600, "cost_center": cc}],
+		account_payment=acc("1110 - Cash"), cost_center=cc, remarks="before", submit=True,
+	)
+	gl_before = len(gl_of(posted))
+
+	posted.reload()
+	posted.remarks = "after"
+	posted.save()
+	posted.reload()
+
+	check_eq("the submitted voucher kept its row", len(posted.references), 1)
+	check_eq("its ledger rows are all still there", len(gl_of(posted)), gl_before)
+	check_eq("and the edit still landed", posted.remarks, "after")
+
+
 def check_precision_is_pinned():
 	print("\n[23] Money is pinned to two decimals inside the app only")
 
@@ -1623,6 +1717,7 @@ def run(keep=False):
 		check_header_dimensions_and_defaults(cc, cc2)
 		check_rounding(templates, cc)
 		check_ledger_follows_the_edit(cc, cc2)
+		check_abandoned_rows(templates, cc)
 		check_precision_is_pinned()
 		check_grid_budget()
 
