@@ -47,6 +47,58 @@ EXCHANGE_DIFFERENCE_LIMIT = 0.01
 
 
 class VouchersEntry(Document):
+	def before_validate(self):
+		self.drop_abandoned_rows()
+
+	def drop_abandoned_rows(self):
+		"""Discard reference rows that were started and never filled in.
+
+		Adding a row seeds its party from the header default and fetches that party's
+		account, so a row nobody meant to keep still looks populated while carrying no
+		money. Refusing the whole save over it is the wrong trade — the user cannot see
+		why an apparently complete row is being rejected.
+
+		Only rows holding *nothing but* that seeding are dropped. An amount, a tax
+		template, a project or a remark all mean the user touched the row, so it stays and
+		`validate_rows` still refuses it — a half-entered line is a mistake worth showing,
+		not one worth deleting.
+
+		This runs in `before_validate`, which Frappe calls on save and submit but *not* on
+		update-after-submit. Rows can therefore never disappear from a voucher that is
+		already posted, which would strand its ledger entries.
+		"""
+		if self.payment_type == "Internal Transfer":
+			return
+
+		kept = []
+		dropped = 0
+
+		for row in self.references:
+			touched = (
+				flt(row.amount)
+				or row.taxes
+				or row.project
+				or (row.user_remark or "").strip()
+			)
+
+			if touched:
+				kept.append(row)
+			else:
+				dropped += 1
+
+		if not dropped:
+			return
+
+		for position, row in enumerate(kept, start=1):
+			row.idx = position
+
+		self.references = kept
+
+		frappe.msgprint(
+			_("{0} empty row(s) were removed from Accounts References.").format(dropped),
+			alert=True,
+		)
+
 	def validate(self):
 		self.set_missing_values()
 		self.validate_posting_date()

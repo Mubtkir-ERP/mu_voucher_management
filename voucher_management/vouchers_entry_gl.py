@@ -114,7 +114,7 @@ def on_update_after_submit(doc, method=None):
     row_by_key = _rows_by_account_and_party(doc)
 
     updated = 0
-    unmatched = 0
+    unmatched = []
 
     for gl in gl_rows:
         owner = _owner_of(gl, header_accounts, row_by_key)
@@ -123,7 +123,7 @@ def on_update_after_submit(doc, method=None):
             # A ledger row we cannot attribute. Leaving it alone is the only safe move:
             # stamping the header's values on what may be a row line would put one row's
             # cost centre on another's.
-            unmatched += 1
+            unmatched.append(f"{gl.account} / {gl.party or '—'}")
             continue
 
         if owner != "__header__" and not gl.voucher_detail_no:
@@ -157,11 +157,18 @@ def on_update_after_submit(doc, method=None):
         frappe.msgprint(_("{0} General Ledger row(s) updated in place.").format(updated), alert=True)
 
     if unmatched:
+        # Name them. A bare count tells the user something is wrong but not what to look
+        # at; the account and party are enough to find the row that needs amending.
         frappe.msgprint(
-            _(
-                "{0} General Ledger row(s) could not be matched to a line of this voucher "
-                "and were left unchanged. Cancel and amend the voucher to rebuild them."
-            ).format(unmatched),
+            _("These General Ledger rows carry no link to a line of this voucher, so they were left unchanged:")
+            + "<br><br>"
+            + "<br>".join(f"&bull; {frappe.bold(entry)}" for entry in sorted(set(unmatched)))
+            + "<br><br>"
+            + _(
+                "This happens on vouchers posted before each ledger row was tagged with "
+                "its source line, when two rows share the same account and party so the "
+                "tag cannot be inferred. Cancel and amend the voucher to rebuild them."
+            ),
             indicator="orange",
             title=_("Partially updated"),
         )

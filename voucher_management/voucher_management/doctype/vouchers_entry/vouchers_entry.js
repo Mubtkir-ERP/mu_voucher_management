@@ -184,28 +184,24 @@ frappe.ui.form.on('Vouchers Entry', {
 
 // Child table events for the accounts grid
 frappe.ui.form.on('Voucher Entry Account', {
-    amount:           (frm, cdt, cdn) => compute_tax_for_row(frm, cdt, cdn),
+    amount:           (frm, cdt, cdn) => {
+        seed_party_from_default(frm, cdt, cdn);
+        compute_tax_for_row(frm, cdt, cdn);
+    },
     taxes:            (frm, cdt, cdn) => compute_tax_for_row(frm, cdt, cdn),
     exchange_rate:    (frm)           => recalc_totals(frm),
     account:          (frm, cdt, cdn) => set_row_currency(frm, cdt, cdn),
     party:            (frm, cdt, cdn) => set_party_account_safely(frm, cdt, cdn),
     references_add:   (frm, cdt, cdn) => {
-        // Pre-fill party_type based on the payment direction, then seed the party from
-        // the header default. These header fields are a typing shortcut only — they are
-        // deliberately NOT accounting dimensions, because a dimension set on the header
-        // is stamped on every GL line including the bank and tax lines, which would tag
-        // a multi-party voucher with a single party.
-        let is_receive = frm.doc.payment_type === 'Receive';
-        let is_pay     = frm.doc.payment_type === 'Pay';
-
-        let p_type = is_receive ? 'Customer' : is_pay ? 'Supplier' : '';
+        // Only the party *type*, which follows from the payment direction and pulls
+        // nothing in behind it. The party itself is seeded once the row has an amount —
+        // see seed_party_from_default. Filling it here made every freshly added row
+        // arrive complete-looking but empty: a party, an account fetched from it, and
+        // 0.00. Abandoning such a row then blocked the save on a line the user never
+        // meant to create.
+        let p_type = frm.doc.payment_type === 'Receive' ? 'Customer'
+                   : frm.doc.payment_type === 'Pay'     ? 'Supplier' : '';
         frappe.model.set_value(cdt, cdn, 'party_type', p_type);
-
-        let party = is_receive ? frm.doc.default_customer
-                  : is_pay     ? frm.doc.default_supplier : null;
-
-        // set_value on `party` fires the row's own handler, which fetches the account.
-        if (party) frappe.model.set_value(cdt, cdn, 'party', party);
     },
     references_remove: (frm) => recalc_totals(frm),  // recalculate when a row is deleted
 });
@@ -318,6 +314,20 @@ async function account_currency_of(frm, account) {
     // A blank currency on an Account means the company currency in ERPNext.
     let value = await frappe.db.get_value('Account', account, 'account_currency');
     return (value && value.message && value.message.account_currency) || frm.doc.currency;
+}
+
+function seed_party_from_default(frm, cdt, cdn) {
+    // The header's Default Customer / Default Supplier is a typing shortcut. It lands on
+    // the row the moment the row carries money — not when the row is created — so an
+    // abandoned row stays visibly empty instead of looking finished at 0.00.
+    let row = locals[cdt] && locals[cdt][cdn];
+    if (!row || row.party || !flt(row.amount)) return;
+
+    let party = frm.doc.payment_type === 'Receive' ? frm.doc.default_customer
+              : frm.doc.payment_type === 'Pay'     ? frm.doc.default_supplier : null;
+
+    // set_value on `party` fires the row's own handler, which fetches the account.
+    if (party) frappe.model.set_value(cdt, cdn, 'party', party);
 }
 
 function set_party_account_safely(frm, cdt, cdn) {
