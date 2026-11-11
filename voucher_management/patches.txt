@@ -7,3 +7,4 @@
 voucher_management.patches.enable_dimension_allow_on_submit
 voucher_management.patches.rename_suppiler_to_supplier
 voucher_management.patches.backfill_exchange_rates
+voucher_management.patches.stamp_legacy_ledger_rows

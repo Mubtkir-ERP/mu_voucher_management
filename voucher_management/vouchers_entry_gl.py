@@ -98,7 +98,8 @@ def on_update_after_submit(doc, method=None):
     gl_rows = frappe.get_all(
         "GL Entry",
         filters={"voucher_type": doc.doctype, "voucher_no": doc.name, "is_cancelled": 0},
-        fields=["name", "voucher_detail_no", "account", "party"],
+        fields=["name", "voucher_detail_no", "account", "party", "debit", "credit"],
+        order_by="creation asc, name asc",
     )
 
     if not gl_rows:
@@ -110,14 +111,14 @@ def on_update_after_submit(doc, method=None):
         [frappe._dict({"posting_date": doc.posting_date, "company": doc.company, "voucher_type": doc.doctype})]
     )
 
-    header_accounts = _header_accounts(doc)
-    row_by_key = _rows_by_account_and_party(doc)
+    owners = _owners_by_ledger_row(doc, gl_rows, _header_accounts(doc))
+    rows_by_name = {row.name: row for row in doc.references}
 
     updated = 0
     unmatched = []
 
     for gl in gl_rows:
-        owner = _owner_of(gl, header_accounts, row_by_key)
+        owner = owners.get(gl.name)
 
         if owner is None:
             # A ledger row we cannot attribute. Leaving it alone is the only safe move:
@@ -126,14 +127,25 @@ def on_update_after_submit(doc, method=None):
             unmatched.append(f"{gl.account} / {gl.party or '—'}")
             continue
 
+        values = dict(changes.get(owner) or {})
+
         if owner != "__header__" and not gl.voucher_detail_no:
             # Identified a legacy row line. Stamp it so the next edit is an exact match
-            # instead of another guess.
+            # instead of another guess, and bring it up to date with its line in one go:
+            # every edit it missed while it could not be attributed is still outstanding.
             frappe.db.set_value("GL Entry", gl.name, "voucher_detail_no", owner,
                                 update_modified=False)
             gl.voucher_detail_no = owner
 
-        values = changes.get(owner)
+            row = rows_by_name.get(owner)
+            if row:
+                for fieldname in ROW_GL_FIELDS:
+                    values.setdefault(
+                        "remarks" if fieldname == "user_remark" else fieldname,
+                        (row.user_remark or doc.remarks or "") if fieldname == "user_remark"
+                        else row.get(fieldname),
+                    )
+
         if not values:
             continue
 
@@ -188,36 +200,61 @@ def _header_accounts(doc):
     return {account for account in accounts if account}
 
 
-def _rows_by_account_and_party(doc):
-    """Map (account, party) -> row name, for keys that belong to exactly one row.
+def _row_amounts(row):
+    """The figures a row can have posted, most specific first."""
+    return (row.get("base_amount_before_tax"), row.get("amount_before_tax"),
+            row.get("base_amount"), row.get("amount"))
 
-    A key shared by two rows tells us nothing about which of them a ledger row came from,
-    so it is dropped rather than guessed at.
+
+def _match_by_order(rows, entries):
+    """Pair same-key rows with same-key ledger rows, in the order they were written.
+
+    Reached only for rows posted before the ledger carried a stamp. Both sides are read
+    in creation order, so the pairing is positional; it is accepted only when the counts
+    line up and every pair agrees on its amount, and refused as a whole otherwise. That
+    keeps a voucher whose ledger was merged — two rows behind one ledger line — out of
+    reach instead of mis-assigning it.
+    """
+    if len(rows) != len(entries):
+        return {}
+
+    pairs = {}
+    for row, entry in zip(rows, entries):
+        posted = abs(flt(entry.debit) - flt(entry.credit))
+        if not any(abs(posted - abs(flt(amount))) <= 0.01 for amount in _row_amounts(row) if amount):
+            return {}
+        pairs[entry.name] = row.name
+
+    return pairs
+
+
+def _owners_by_ledger_row(doc, gl_rows, header_accounts):
+    """Map {ledger row name: reference row name | "__header__"} for the whole voucher.
+
+    A stamped row names its own line. A header line never carries a stamp. What is left
+    is a line posted before stamping existed: it is matched back by account and party,
+    and when several lines share that key, by amount and order.
     """
     owners = {}
+    loose_rows, loose_entries = {}, {}
 
+    for entry in gl_rows:
+        if entry.voucher_detail_no:
+            owners[entry.name] = entry.voucher_detail_no
+        elif not entry.party and entry.account in header_accounts:
+            owners[entry.name] = "__header__"
+        else:
+            loose_entries.setdefault((entry.account, entry.party or ""), []).append(entry)
+
+    stamped = set(owners.values())
     for row in doc.references:
-        key = (row.account, row.party or "")
-        owners.setdefault(key, []).append(row.name)
+        if row.name not in stamped:
+            loose_rows.setdefault((row.account, row.party or ""), []).append(row)
 
-    return {key: names[0] for key, names in owners.items() if len(names) == 1}
+    for key, rows in loose_rows.items():
+        owners.update(_match_by_order(rows, loose_entries.get(key) or []))
 
-
-def _owner_of(gl, header_accounts, row_by_key):
-    """Which part of the voucher a ledger row came from.
-
-    Returns the reference row's name, "__header__", or None when it cannot be told.
-    """
-    if gl.voucher_detail_no:
-        return gl.voucher_detail_no
-
-    # Header lines legitimately carry no stamp.
-    if not gl.party and gl.account in header_accounts:
-        return "__header__"
-
-    # Otherwise it is a row line from before the stamp existed — match it back by the
-    # only identity it still has.
-    return row_by_key.get((gl.account, gl.party or ""))
+    return owners
 
 
 # ---------------------------------------------------------------------------
