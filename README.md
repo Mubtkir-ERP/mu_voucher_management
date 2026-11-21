@@ -1,3 +1,21 @@
+<!-- MUBTKIR-UNIFIED-README-START -->
+## نظام إدارة السندات متعددة الأطراف | Voucher Management
+
+تطبيق لإدارة سندات القبض والصرف والتحويلات الداخلية متعددة الأطراف المحاسبية بمرونة عالية.
+* **الفئة المستهدفة:** المحاسبين والشركات ذات القيود المالية المتعددة في السند الواحد.
+
+Multi-party receipt, payment, and internal transfer voucher management built for ERPNext.
+* **Target Audience:** Accountants and businesses handling multi-party financial vouchers.
+
+### تواصل معنا | Contact & Sales — [مبتكر للأنظمة السحابية | Mubtkir ERP](https://mubtkir.com)
+
+* 🌐 **الموقع الرسمي | Website:** [Mubtkir ERP — حلول ERPNext السحابية](https://mubtkir.com)
+* 📧 **البريد الإلكتروني | Email:** [sales@mubtkir.com](mailto:sales@mubtkir.com)
+* 📱 **الجوال | Mobile:** [+966547706865](tel:+966547706865)
+* 💬 **واتساب | WhatsApp:** [+966126810486](https://wa.me/966126810486)
+
+<!-- MUBTKIR-UNIFIED-README-END -->
+
 # Voucher Management
 
 سند قبض / صرف / تحويل داخلي **متعدد الأطراف** لـ ERPNext.
